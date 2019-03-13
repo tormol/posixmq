@@ -1,0 +1,23 @@
+[package]
+name = "posixmq"
+version = "0.1.0"
+description = "A posix message queue wrapper with optional mio support"
+license = "Apache-2.0 / MIT"
+authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
+keywords = ["posix", "mq", "mqueue", "queue", "posix_mq"]
+categories = ["os::unix-apis", "asynchronous"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2.35" # .35 added symbols for (Free|Net|Dragonfly)BSD
+mio = {version = "0.6.0", optional=true} # TODO find compatible version range
+
+[lib]
+path = "posixmq.rs"
+
+[[test]]
+name = "test"
+path = "tests.rs"
+
+[package.metadata.docs.rs]
+features = ["mio"]
