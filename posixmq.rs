@@ -358,8 +358,9 @@ impl PosixMq {
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
         let mut capacities_ptr = ptr::null_mut::<mq_attr>();
         if opts.capacity != 0 || opts.max_msg_len != 0 {
-            capacities.mq_maxmsg = opts.capacity as c_long;
-            capacities.mq_msgsize = opts.max_msg_len as c_long;
+            // c_longlong on x86_64-unknown-linux-gnux32
+            capacities.mq_maxmsg = (opts.capacity as c_long).into();
+            capacities.mq_msgsize = (opts.max_msg_len as c_long).into();
             capacities_ptr = &mut capacities as *mut mq_attr;
         }
 
