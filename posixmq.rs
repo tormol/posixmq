@@ -20,11 +20,12 @@
 //! # Supported operating systems
 //!
 //! * Linux >= 2.6.26: all features, tested
-//! * FreeBSD 11+: everything except `FromRawFd` and `IntoRawFd`
+//! * FreeBSD 11+: everything except `FromRawFd` and `IntoRawFd`, tested
 // (11 added a function which made `AsRawFd` and thereby mio `Evented` possible)
 // [r306588](https://github.com/freebsd/freebsd/commit/6e61756bbf70) merged on 2016-10-09
 //! * NetBSD, Rumprun, Fuchisa, Emscripten: untested but all features might work
 //! * DragonFlyBSD: untested, only basic support (no `AsRawFd` or mio integration)
+//! * Solaris: should have them, but libc doesn't appear to have the functions.
 //! * Not macOS, Android, OpenBSD or Windows (doesn't have posix message queues)
 //! * Other: [if exposed by the libc crate](https://github.com/rust-lang/libc/search?q=mqd_t&unscoped_q=mqd_t)
 //!
@@ -75,7 +76,7 @@ use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
 #[cfg(not(target_os="dragonflybsd"))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(target_os="linux")]
+#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
@@ -83,8 +84,12 @@ use libc::{c_int, c_uint, c_long, mode_t};
 use libc::{mqd_t, mq_attr, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
+
 #[cfg(target_os="freebsd")]
-use libc::mq_getfd_np;
+extern "C" {
+    // not in libc (yet)
+    fn mq_getfd_np(mq: mqd_t) -> c_int;
+}
 
 #[cfg(feature="mio")]
 extern crate mio;
@@ -346,6 +351,10 @@ pub struct PosixMq {
 
 impl PosixMq {
     fn new_c(name: &CStr,  opts: &OpenOptions) -> Result<Self, io::Error> {
+        // because mq_open is a vararg function, mode_t cannot be passed
+        // directly on FreeBSD where it's smaller than c_int.
+        let permissions = opts.permissions as c_int;
+
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
         let mut capacities_ptr = ptr::null_mut::<mq_attr>();
         if opts.capacity != 0 || opts.max_msg_len != 0 {
@@ -354,10 +363,10 @@ impl PosixMq {
             capacities_ptr = &mut capacities as *mut mq_attr;
         }
 
-        let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, opts.permissions, capacities_ptr) };
+        let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, permissions, capacities_ptr) };
 
         // even when mqd_t is a pointer, -1 is the return value for error
-        if mqd == -1 as mqd_t {
+        if mqd == -1isize as mqd_t {
             Err(io::Error::last_os_error())
         } else {
             // TODO check if O_CLOEXEC and/or O_NONBLOCK was actually set
@@ -444,7 +453,7 @@ impl AsRawFd for PosixMq {
     // FreeBSD has mq_getfd_np() (where _np stands for non-portable)
     #[cfg(target_os="freebsd")]
     fn as_raw_fd(&self) -> RawFd {
-        mq_getfd_np(self.mqd) as RawFd
+        unsafe { mq_getfd_np(self.mqd) as RawFd }
     }
 }
 

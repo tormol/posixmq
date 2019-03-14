@@ -8,12 +8,13 @@ extern crate mio;
 
 #[test]
 fn unlink_invalid_names() {
-    assert_eq!(unlink("").unwrap_err().kind(), ErrorKind::NotFound);
-    assert_eq!(unlink("/").unwrap_err().kind(), ErrorKind::NotFound);
-    assert_eq!(unlink("//").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(unlink("/foo/bar").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(unlink("/foo/").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(unlink("//").unwrap_err().kind(), ErrorKind::PermissionDenied);
+    assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind());
+    let err = unlink("//").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = unlink("/foo/bar").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = unlink("/foo/").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
     //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
     assert_eq!(unlink("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
     assert_eq!(unlink(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
@@ -21,17 +22,19 @@ fn unlink_invalid_names() {
 
 #[test]
 fn open_invalid_names() {
-    assert_eq!(PosixMq::create("").unwrap_err().kind(), ErrorKind::NotFound);
-    assert_eq!(PosixMq::create("/").unwrap_err().kind(), ErrorKind::NotFound);
-    assert_eq!(PosixMq::create("//").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::create("/foo/bar").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::create("/foo/").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::create("//").unwrap_err().kind(), ErrorKind::PermissionDenied);
+    assert_eq!(PosixMq::create("").unwrap_err().kind(), PosixMq::create("/").unwrap_err().kind());
+    let err = PosixMq::create("//").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = PosixMq::create("/foo/bar").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = PosixMq::create("/foo/").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
     //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
     assert_eq!(PosixMq::create("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
     assert_eq!(PosixMq::create(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
 }
 
+#[cfg(not(target_os="freebsd"))]// crashes the system
 #[test]
 fn reserved_names() {
     // That /. and /.. cannot be created is not that surprising, but not documented either.
@@ -51,15 +54,15 @@ fn invalid_cstr_names() {
     }
 
     assert_eq!(unlink_c(c("\0")).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(unlink_c(c("/\0")).unwrap_err().kind(), ErrorKind::NotFound);
+    let err = unlink_c(c("/\0")).unwrap_err().kind();
+    assert!(err == ErrorKind::NotFound || err == ErrorKind::InvalidInput);
+
     assert_eq!(
         OpenOptions::readonly().create().open_c(c("\0")).unwrap_err().kind(),
         ErrorKind::InvalidInput
     );
-    assert_eq!(
-        OpenOptions::readonly().create().open_c(c("/\0")).unwrap_err().kind(),
-        ErrorKind::NotFound
-    );
+    let err = OpenOptions::readonly().create().open_c(c("/\0")).unwrap_err().kind();
+    assert!(err == ErrorKind::NotFound  ||  err == ErrorKind::InvalidInput);
 }
 
 #[test]
@@ -205,7 +208,7 @@ fn drop_closes() {
     drop(mq);
     // Would ideally have created something completely unnamed,
     // but this should also be unobtrusive.
-    let with_fd = std::net::TcpListener::bind("127.16.13.17:0")
+    let with_fd = std::net::TcpListener::bind("127.0.0.1:0")
         .expect("cannot listen on any port on loopback");
     assert_eq!(mq_fd, with_fd.as_raw_fd());
 }
@@ -226,6 +229,8 @@ fn into_fd_doesnt_drop() {
     }
 }
 
+// TODO check whether mqd_t is threadsafe on those OSes
+#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
 #[test]
 fn is_send_and_sync() {
     fn is_send<T:Send>() -> bool {true}
