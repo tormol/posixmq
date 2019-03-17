@@ -366,14 +366,22 @@ impl PosixMq {
         }
 
         let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, permissions, capacities_ptr) };
-
         // even when mqd_t is a pointer, -1 is the return value for error
         if mqd == -1isize as mqd_t {
-            Err(io::Error::last_os_error())
-        } else {
-            // TODO check if O_CLOEXEC and/or O_NONBLOCK was actually set
-            Ok(PosixMq{mqd})
+            return Err(io::Error::last_os_error());
         }
+
+        let mq = PosixMq{mqd};
+
+        // close-on-exec is enabled even without O_CLOEXEC on both Linux and FreeBSD
+        // TODO optimize by storing platform behaviour in a global atomic variable
+        // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
+        // and if open() created a queue, the caller must be able to differentiate.
+        #[cfg(not(target_os="dragonflybsd"))]
+        let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
+
+        // TODO check if O_NONBLOCK was actually set (NetBSD ignores it)
+        Ok(mq)
     }
 
     /// Open an existing queue in read-only mode.
