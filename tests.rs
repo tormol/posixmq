@@ -101,6 +101,37 @@ fn create_and_remove() {
     assert_eq!(PosixMq::open("/flash").unwrap_err().kind(), ErrorKind::NotFound);
 }
 
+#[test]
+#[cfg(not(target_os="dragonflybsd"))]
+fn is_cloexec() {
+    let mq = PosixMq::create("/is_cloexec").unwrap();
+    let _ = posixmq::unlink("/is_cloexec");
+    assert!(mq.is_cloexec());
+}
+
+#[test]
+#[cfg(not(target_os="dragonflybsd"))]
+fn is_not_cloexec() {
+    let mq = OpenOptions::writeonly()
+        .not_cloexec()
+        .create()
+        .open("/not_cloexec")
+        .unwrap();
+    let _ = posixmq::unlink("/not_cloexec");
+    assert!(!mq.is_cloexec());
+}
+
+#[test]
+#[cfg(not(target_os="dragonflybsd"))]
+fn change_cloexec() {
+    let mq = PosixMq::create("/change_cloexec").unwrap();
+    let _ = posixmq::unlink("/change_cloexec");
+    unsafe { mq.set_cloexec(false).unwrap() };
+    assert!(!mq.is_cloexec());
+    unsafe { mq.set_cloexec(true).unwrap() };
+    assert!(mq.is_cloexec());
+}
+
 
 #[test]
 fn send_errors() {

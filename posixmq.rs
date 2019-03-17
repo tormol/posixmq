@@ -84,6 +84,7 @@ use libc::{c_int, c_uint, c_long, mode_t};
 use libc::{mqd_t, mq_attr, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
+use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
 
 #[cfg(target_os="freebsd")]
 extern "C" {
@@ -433,6 +434,66 @@ impl PosixMq {
                 return Err(err)
             }
         }
+    }
+
+
+    /// Check whether this descriptor will be closed if the process `exec`s
+    /// into another program.
+    ///
+    /// # Errors
+    ///
+    /// Retrieving this flag should only fail if the queue is already closed.
+    /// In that case `true` is returned because the queue will not be open
+    /// after `exec`ing.
+    #[cfg(not(target_os="dragonflybsd"))]
+    pub fn is_cloexec(&self) -> bool {
+        let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
+        if flags == -1 {
+            true
+        } else {
+            (flags & FD_CLOEXEC) != 0
+        }
+    }
+
+    /// Set close-on-exec for this descriptor.
+    ///
+    /// `PosixMq` enables close-on-exec by default when opening message queues,
+    /// but this can be disabled with `OpenOptions::not_cloexec()`.
+    /// Prefer using `OpenOptions` to set it, because another thread might
+    /// `exec` between the message queue being opened and this change taking
+    /// effect.
+    ///
+    /// Additionally, this function has a race condition with itself, as the
+    /// flag cannot portably be set atomically without affecting other attributes.
+    ///
+    /// # Errors
+    ///
+    /// This function should only fail if the underlying file descriptor has
+    /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
+    /// and not reused for something else yet.
+    #[cfg(not(target_os="dragonflybsd"))]
+    pub unsafe fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
+        // Race-prone but portable; Linux and the BSDs have fcntl(, F_IOCLEX)
+        // but fuchsia and solarish doesn't.
+        // https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/fd.rs#L173
+        let prev = fcntl(self.as_raw_fd(), F_GETFD);
+        if prev == -1 {
+            // Don't hide the error here, because callers can ignore the
+            // returned value if they want.
+            return Err(io::Error::last_os_error());
+        }
+        let new = if cloexec {
+            prev | FD_CLOEXEC
+        } else {
+            prev & !FD_CLOEXEC
+        };
+        if new != prev {
+            let ret = fcntl(self.as_raw_fd(), F_SETFD, new);
+            if ret == -1 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
     }
 }
 
