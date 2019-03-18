@@ -25,11 +25,11 @@ This feature is not enabled by default; enable it by adding this to Cargo.toml:
 posixmq = {version="0.1", features="mio"}
 ```
 
-Also remember to open the queues in nonblocking mode.
+Also remember to open the message queues in nonblocking mode.
 
 ## Differences from `posix_mq` crate
 
-* `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, which avoids unecessary allocations.
+* `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, which avoids unnecessary allocations.
 * Optionally integrates with `mio` so the message queues can be polled (Linux-only).
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
 

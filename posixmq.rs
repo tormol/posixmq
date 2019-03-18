@@ -19,15 +19,16 @@
 //!
 //! # Supported operating systems
 //!
-//! * Linux >= 2.6.26: all features, tested
-//! * FreeBSD 11+: everything except `FromRawFd` and `IntoRawFd`, tested
+//! * Linux >= 2.6.26: all features, tested on CI.
+//! * FreeBSD 11+: everything except `FromRawFd` and `IntoRawFd`, tested on CI.
 // (11 added a function which made `AsRawFd` and thereby mio `Evented` possible)
 // [r306588](https://github.com/freebsd/freebsd/commit/6e61756bbf70) merged on 2016-10-09
-//! * NetBSD, Rumprun, Fuchisa, Emscripten: untested but all features might work
-//! * DragonFlyBSD: untested, only basic support (no `AsRawFd` or mio integration)
-//! * Solaris: should have them, but libc doesn't appear to have the functions.
-//! * Not macOS, Android, OpenBSD or Windows (doesn't have posix message queues)
-//! * Other: [if exposed by the libc crate](https://github.com/rust-lang/libc/search?q=mqd_t&unscoped_q=mqd_t)
+//! * NetBSD: untested but all features cross-compile and might work.
+//! * Fuchsia: untested but default features cross-compile.
+//! * DragonFlyBSD: untested, only basic features (no `AsRawFd` or mio integration)
+//! * Solaris / Illumos: The OS should have them, but libc doesn't export symbols
+//! * Not Windows, macOS, Android, OpenBSD or Rumprun. (doesn't have posix message queues)
+//! * Other: [maybe if the libc crate has the symbols](https://github.com/rust-lang/libc/search?q=mq_open&unscoped_q=mq_open) core features might work.
 //!
 //! This library will try to compile most features even if the target OS
 //! doesn't support posix message queues. `AsRawFd`, `FromRawFd` and `IntoRawFd`
@@ -38,25 +39,23 @@
 //!
 //! * `send()` and `receive()` tries again when EINTR / `ErrorKind::Interrupted`
 //!   is returned. (Consistent with normal Rust io)
-//! * Queues are by default opened with O_CLOEXEC. (but see TODO entry below)
-//!   (Consistent with normal Rust io)
+//! * Descriptors are by default opened with O_CLOEXEC. (Consistent with normal Rust io)
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
 //!
 //! # Missing features / wishlist / TODO
 //!
-//! * Also set O_CLOEXEC on platforms when it cannot be done trough `mq_open()`
-//!   (Linux < 2.6.26 and any BSD)
-//! * Try on FreeBSD (CirrusCI)
 //! * Querying capacities, current # of messages, permissions and mode (`mq_getattr()`)
 //! * Changing nonblocking mode (`mq_setattr()`)
 //! * `send_timeout()` (`mq_timedsend()`)
 //! * `receive_timeout()` (`mq_timedreceive()`)
+//! * `try_clone()`
 //! * `Iterator` struct that calls `receive()`
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
 //! * Getting and possibly changing limits and default values
-//! * Struct that deletes the queue when dropped
+//! * Struct that deletes the message queue when dropped
+//! * Test or check more platforms on CI
 //! * Examples in the documentation
 //! * Support more OSes?
 //! * `mq_notify()`?
@@ -149,7 +148,8 @@ fn name_to_cstring(name: &[u8]) -> Result<CString, io::Error> {
 
 // Cannot use std::fs's because it doesn't expose getters,
 // and rolling our own means we can also use it for mq-specific capacities.
-/// Flags and parameters which control how a queue is opened or created.
+/// Flags and parameters which control how a [`PosixMq`](struct.PosixMq.html)
+/// message queue is opened or created.
 #[derive(Clone,Copy, PartialEq,Eq)]
 pub struct OpenOptions {
     mode: c_int,
@@ -187,17 +187,17 @@ impl OpenOptions {
         }
     }
 
-    /// Open queue for receiving only.
+    /// Open message queue for receiving only.
     pub fn readonly() -> Self {
         OpenOptions::new(O_RDONLY)
     }
 
-    /// Open queue for sending only.
+    /// Open message queue for sending only.
     pub fn writeonly() -> Self {
         OpenOptions::new(O_WRONLY)
     }
 
-    /// Open queue both for sending and receiving.
+    /// Open message queue both for sending and receiving.
     pub fn readwrite() -> Self {
         OpenOptions::new(O_RDWR)
     }
@@ -216,7 +216,10 @@ impl OpenOptions {
     /// `receive()` will fail if given a buffer smaller than this value.
     ///
     /// If max_msg_len and capacity are both zero (or not set), the queue
-    /// will be created with a maximum length and capacity decided by the OS.
+    /// will be created with a maximum length and capacity decided by the
+    /// operating system.  
+    /// If this value is specified, capacity should also be, or opening the
+    /// message queue might fail.
     pub fn max_msg_len(&mut self,  max_msg_len: usize) -> &mut Self {
         self.max_msg_len = max_msg_len;
         return self;
@@ -228,13 +231,16 @@ impl OpenOptions {
     /// or fail with an error of type `ErrorKind::WouldBlock`.
     ///
     /// If both capacity and max_msg_len are zero (or not set), the queue
-    /// will be created with a maximum length and capacity decided by the OS.
+    /// will be created with a maximum length and capacity decided by the
+    /// operating system.  
+    /// If this value is specified, max_msg_len should also be, or opening the
+    /// message queue might fail.
     pub fn capacity(&mut self,  capacity: usize) -> &mut Self {
         self.capacity = capacity;
         return self;
     }
 
-    /// Create queue if it doesn't exist.
+    /// Create message queue if it doesn't exist.
     pub fn create(&mut self) -> &mut Self {
         self.mode |= O_CREAT;
         self.mode &= !O_EXCL;
@@ -253,15 +259,15 @@ impl OpenOptions {
         return self;
     }
 
-    /// Open the queue in non-blocking mode.
+    /// Open the message queue in non-blocking mode.
     ///
-    /// This must be done if you want to use the queue with mio.
+    /// This must be done if you want to use the message queue with mio.
     pub fn nonblocking(&mut self) -> &mut Self {
         self.mode |= O_NONBLOCK;
         return self;
     }
 
-    /// Keep the message queue open in forked child processes.
+    /// Keep the message queue open after `exec`ing into another program.
     pub fn not_cloexec(&mut self) -> &mut Self {
         self.mode &= !O_CLOEXEC;
         return self;
@@ -341,11 +347,12 @@ pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
 }
 
 
-/// A reference to an open posix message queue.
+/// A descriptor for an open posix message queue.
 ///
-/// Queues can sent to and/or received from depending on the options it was opened with.
+/// Message queues can sent to and / or received from depending on the options
+/// it was opened with.
 ///
-/// The descriptor is closed when this handle is dropped.
+/// The descriptor is closed when this struct is dropped.
 pub struct PosixMq {
     mqd: mqd_t
 }
@@ -384,16 +391,18 @@ impl PosixMq {
         Ok(mq)
     }
 
-    /// Open an existing queue in read-only mode.
+    /// Open an existing message queue in read-only mode.
     ///
-    /// See [`OpenOptions::open()`](struct.OpenOptions.html#open) for details and possible errors.
+    /// See [`OpenOptions::open()`](struct.OpenOptions.html#method.open) for
+    /// details and possible errors.
     pub fn open<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<Self, io::Error> {
         OpenOptions::readonly().open(name)
     }
 
-    /// Open a queue in read-write mode, creating it if it doesn't exists.
+    /// Open a message queue in read-write mode, creating it if it doesn't exists.
     ///
-    /// See [`OpenOptions::open()`](struct.OpenOptions.html#open) for details and possible errors.
+    /// See [`OpenOptions::open()`](struct.OpenOptions.html#method.open) for
+    /// details and possible errors.
     pub fn create<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<Self, io::Error> {
         OpenOptions::readwrite().create().open(name)
     }
