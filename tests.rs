@@ -1,3 +1,4 @@
+use std::ffi::CStr;
 use std::io::ErrorKind;
 
 extern crate posixmq;
@@ -7,45 +8,67 @@ use posixmq::{PosixMq, OpenOptions, Attributes, unlink, unlink_c, name_from_byte
 extern crate mio;
 
 #[test]
-fn unlink_invalid_names() {
-    assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind());
-    let err = unlink("//").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    let err = unlink("/foo/bar").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    let err = unlink("/foo/").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
+fn name_with_nul() {
     assert_eq!(unlink("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(unlink(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
+    assert_eq!(PosixMq::create("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
 }
 
 #[test]
-fn open_invalid_names() {
-    assert_eq!(PosixMq::create("").unwrap_err().kind(), PosixMq::create("/").unwrap_err().kind());
-    let err = PosixMq::create("//").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    let err = PosixMq::create("/foo/bar").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    let err = PosixMq::create("/foo/").unwrap_err().kind();
-    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::create("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
+fn name_too_long() {
+    assert_eq!(unlink(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
     assert_eq!(PosixMq::create(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
 }
 
-#[cfg(not(target_os="freebsd"))]// crashes the system
+#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
 #[test]
-fn reserved_names() {
-    // That /. and /.. cannot be created is not that surprising, but not documented either.
-    assert_eq!(PosixMq::create("/.").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::create("/..").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::open("/.").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(PosixMq::open("/..").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(unlink("/.").unwrap_err().kind(), ErrorKind::PermissionDenied);
-    assert_eq!(unlink("/..").unwrap_err().kind(), ErrorKind::PermissionDenied);
+fn unlink_invalid_names() {
+    assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind(), "\"\"");
+    let err = unlink("//").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "//");
+    let err = unlink("/foo/bar").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "/foo/bar");
+    let err = unlink("/foo/").unwrap_err().kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "/foo/");
+    //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
 }
 
+#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
+#[test]
+fn open_invalid_names() {
+    assert_eq!(PosixMq::create("").unwrap_err().kind(), PosixMq::create("/").unwrap_err().kind());
+    let err = PosixMq::create("//").expect_err("create //").kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = PosixMq::create("/foo/bar").expect_err("create /foo/bar").kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    let err = PosixMq::create("/foo/").expect_err("create /foo/").kind();
+    assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
+    //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
+}
+
+#[cfg(not(any(target_os="freebsd", target_os="netbsd")))]// FreeBSD panics and NetBSD accepts anything
+#[test]
+fn reserved_names() {
+    // That Linux and FreeBSD doesn't like /. and /.. is not that surprising
+    // considering that they expose posix message queues through a virtual
+    // file system, but not documented either.
+    assert_eq!(unlink("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "unlink /.");
+    assert_eq!(unlink("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "unlink /..");
+    assert_eq!(PosixMq::open("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "open /.");
+    assert_eq!(PosixMq::open("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "open /..");
+    assert_eq!(PosixMq::create("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "create /.");
+    assert_eq!(PosixMq::create("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "create /..");
+}
+
+#[test]
+fn empty_cstr_name() {
+    let empty = CStr::from_bytes_with_nul(b"\0").unwrap();
+    let err = unlink_c(empty).expect_err("unlink empty").kind();
+    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink empty");
+    let err = OpenOptions::readonly().create().open_c(empty).expect_err("create empty").kind();
+    assert_eq!(err, ErrorKind::InvalidInput, "create empty");
+}
+
+#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
 #[test]
 fn invalid_cstr_names() {
     use std::ffi::CStr;
@@ -53,16 +76,14 @@ fn invalid_cstr_names() {
         CStr::from_bytes_with_nul(s.as_bytes()).expect("_c name must have trailing '\0'")
     }
 
-    assert_eq!(unlink_c(c("\0")).unwrap_err().kind(), ErrorKind::InvalidInput);
-    let err = unlink_c(c("/\0")).unwrap_err().kind();
-    assert!(err == ErrorKind::NotFound || err == ErrorKind::InvalidInput);
-
-    assert_eq!(
-        OpenOptions::readonly().create().open_c(c("\0")).unwrap_err().kind(),
-        ErrorKind::InvalidInput
-    );
-    let err = OpenOptions::readonly().create().open_c(c("/\0")).unwrap_err().kind();
-    assert!(err == ErrorKind::NotFound  ||  err == ErrorKind::InvalidInput);
+    let err = unlink_c(c("/\0")).expect_err("unlink /").kind();
+    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink /");
+    let err = unlink_c(c("noslash\0")).expect_err("unlink noslash").kind();
+    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink noslash");
+    let err = OpenOptions::readonly().create().open_c(c("noslash\0")).expect_err("create noslash");
+    assert_eq!(err.kind(), ErrorKind::InvalidInput, "create noslash");
+    let err = OpenOptions::readonly().create().open_c(c("/\0")).expect_err("create /").kind();
+    assert!(err == ErrorKind::NotFound  ||  err == ErrorKind::InvalidInput, "create /");
 }
 
 #[test]
@@ -202,8 +223,12 @@ fn send_errors() {
     let bl = OpenOptions::readwrite().open("send").unwrap();
     assert_eq!(bl.send(!0, b"f").unwrap_err().kind(), ErrorKind::InvalidInput);
 
-    assert!(nb.send(9, b"a").is_ok());
-    assert!(bl.send(0, b"").is_ok());
+    nb.send(9, b"a").expect("nonblocking send \"a\"");
+    if cfg!(target_os="netbsd") {// NetBSD doesn't allow empty messages
+        bl.send(0, b"b").expect("blocking send \"b\"");
+    } else {
+        bl.send(0, b"").expect("blocking send empty");
+    }
     assert_eq!(nb.send(0, b"b").unwrap_err().kind(), ErrorKind::WouldBlock);
 
     let ro = OpenOptions::readonly().open("send").unwrap();
@@ -219,7 +244,8 @@ fn receive_errors() {
         .create()
         .max_msg_len(1)
         .capacity(2)
-        .open("receive").unwrap();
+        .open("receive")
+        .unwrap();
     assert_eq!(nb.receive(&mut[0; 2]).unwrap_err().kind(), ErrorKind::WouldBlock);
     assert_eq!(nb.receive(&mut[]).unwrap_err().kind(), ErrorKind::Other); // buffer too short
     let wo = OpenOptions::writeonly().open("receive").unwrap();
@@ -233,19 +259,19 @@ fn send_and_receive() {
     let mq = PosixMq::create(b"/send_and_receive").unwrap();
     let _ = unlink(b"/send_and_receive");
 
-    mq.send(20, b"aaaa").unwrap();
-    mq.send(40, b"bbb").unwrap();
-    mq.send(10, b"cc").unwrap();
-    mq.send(30, b"d").unwrap();
+    mq.send(2, b"aaaa").unwrap();
+    mq.send(4, b"bbb").unwrap();
+    mq.send(1, b"cc").unwrap();
+    mq.send(3, b"d").unwrap();
 
     let mut buf = [0; 8192];
-    assert_eq!(mq.receive(&mut buf).unwrap(), (40, 3));
+    assert_eq!(mq.receive(&mut buf).unwrap(), (4, 3));
     assert_eq!(&buf[..3], b"bbb");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (30, 1));
+    assert_eq!(mq.receive(&mut buf).unwrap(), (3, 1));
     assert_eq!(&buf[..3], b"dbb");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (20, 4));
+    assert_eq!(mq.receive(&mut buf).unwrap(), (2, 4));
     assert_eq!(&buf[..4], b"aaaa");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (10, 2));
+    assert_eq!(mq.receive(&mut buf).unwrap(), (1, 2));
     assert_eq!(&buf[..4], b"ccaa");
 }
 
@@ -325,10 +351,15 @@ fn is_send_and_sync() {
 }
 
 
-#[cfg(feature="mio")]
+#[cfg(all(feature="mio", not(target_os="netbsd")))]
 #[test]
 fn mio() {
     use mio::{Poll, Events, PollOpt, Ready, Token};
+
+    // Start the poll before creating masseage queues so that the syscalls are
+    // easier to separate when debugging.
+    let mut events = Events::with_capacity(8);
+    let poll = Poll::new().expect("cannot create mio Poll");
 
     let mut opts = OpenOptions::readwrite();
     let opts = opts.nonblocking().capacity(1).max_msg_len(10).create_new();
@@ -337,14 +368,14 @@ fn mio() {
     let _ = unlink("/mio_a");
     let _ = unlink("/mio_b");
 
-    let mut events = Events::with_capacity(8);
-    let poll = Poll::new().unwrap();
-    poll.register(&mq_a, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
-    poll.register(&mq_b, Token(1), Ready::readable(), PollOpt::edge()).unwrap();
+    poll.register(&mq_b, Token(1), Ready::readable(), PollOpt::edge())
+        .expect("cannot register message queue with poll");
+    poll.register(&mq_a, Token(0), Ready::readable(), PollOpt::edge())
+        .expect("cannot register message queue with poll");
 
     // test readable
     mq_a.send(3, b"mio a a").unwrap();
-    poll.poll(&mut events, None).unwrap();
+    poll.poll(&mut events, None).expect("cannot poll");
     let mut iter = events.iter();
     assert_eq!(iter.next().unwrap().token(), Token(0));
     assert!(iter.next().is_none());
