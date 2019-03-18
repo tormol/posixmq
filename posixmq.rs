@@ -45,8 +45,6 @@
 //!
 //! # Missing features / wishlist / TODO
 //!
-//! * Querying capacities, current # of messages, permissions and mode (`mq_getattr()`)
-//! * Changing nonblocking mode (`mq_setattr()`)
 //! * `send_timeout()` (`mq_timedsend()`)
 //! * `receive_timeout()` (`mq_timedreceive()`)
 //! * `try_clone()`
@@ -80,7 +78,8 @@ use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
 use libc::{c_int, c_uint, c_long, mode_t};
-use libc::{mqd_t, mq_attr, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
+use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
+use libc::{mq_attr, mq_getattr, mq_setattr};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
@@ -347,6 +346,15 @@ pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
 }
 
 
+// The fields of `mq_attr` are of type `long` on all targets except
+// x86_64-unknown-linux-gnux32, where they are `long long` (to match up with
+// normal x86_64 `long`).
+// Rusts lack of implicit widening makes this peculiarity annoying.
+#[cfg(target="x86_64-unknown-linux-gnux32")]
+type AttrField = i64;
+#[cfg(not(target="x86_64-unknown-linux-gnux32"))]
+type AttrField = c_long;
+
 /// A descriptor for an open posix message queue.
 ///
 /// Message queues can sent to and / or received from depending on the options
@@ -366,9 +374,8 @@ impl PosixMq {
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
         let mut capacities_ptr = ptr::null_mut::<mq_attr>();
         if opts.capacity != 0 || opts.max_msg_len != 0 {
-            // c_longlong on x86_64-unknown-linux-gnux32
-            capacities.mq_maxmsg = (opts.capacity as c_long).into();
-            capacities.mq_msgsize = (opts.max_msg_len as c_long).into();
+            capacities.mq_maxmsg = opts.capacity as AttrField;
+            capacities.mq_msgsize = opts.max_msg_len as AttrField;
             capacities_ptr = &mut capacities as *mut mq_attr;
         }
 
@@ -451,6 +458,66 @@ impl PosixMq {
                 return Err(err)
             }
         }
+    }
+
+
+    /// Get information about the state of the message queue.
+    ///
+    /// # Errors
+    ///
+    /// Retrieving these attributes should only fail if the underlying
+    /// descriptor has been closed or is not a message queue.
+    /// In that case `max_msg_len`, `capacity` and `current_messages` will be
+    /// zero and `nonblocking` is set to `true`.
+    ///
+    /// The rationale for swallowing these errors is that they're only caused
+    /// by buggy code (incorrect usage of `from_raw_fd()` or similar),
+    /// and not having to `.unwrap()` makes the function nicer to use.  
+    /// Future `send()` and `receive()` will reveal the bug when they also fail.
+    /// (Which also means they won't block.)
+    pub fn attributes(&self) -> Attributes {
+        let mut attrs: mq_attr = unsafe { mem::zeroed() };
+        let ret = unsafe { mq_getattr(self.mqd, &mut attrs) };
+        if ret == -1 {
+            Attributes { max_msg_len: 0,  capacity: 0,  current_messages: 0,  nonblocking: true }
+        } else {
+            Attributes {
+                max_msg_len: attrs.mq_msgsize as usize,
+                capacity: attrs.mq_maxmsg as usize,
+                current_messages: attrs.mq_curmsgs as usize,
+                nonblocking: (attrs.mq_flags & (O_NONBLOCK as AttrField)) != 0,
+            }
+        }
+    }
+
+    /// Check whether this descriptor is in nonblocking mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns `true` if retrieving the flag fails,
+    /// see [`attributes()`](struct.PosixMq#method.attributes) for rationale.
+    pub fn is_nonblocking(&self) -> bool {
+        self.attributes().nonblocking
+    }
+
+    /// Enable or disable nonblocking mode for this descriptor.
+    ///
+    /// This can also be set when opening the message queue,
+    /// with [`OpenOptions::nonblocking()`](struct.OpenOptions.html#method.nonblocking).
+    ///
+    /// # Errors
+    ///
+    /// Setting nonblocking mode should only fail due to incorrect usage of
+    /// `from_raw_fd()` or `as_raw_fd()`, see the documentation on
+    /// [`attributes()`](struct.PosixMq.html#method.attributes) for details.
+    pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
+        let mut attrs: mq_attr = unsafe { mem::zeroed() };
+        attrs.mq_flags = if nonblocking {O_NONBLOCK as AttrField} else {0};
+        let res = unsafe { mq_setattr(self.mqd, &attrs, ptr::null_mut()) };
+        if res == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
 
 
@@ -601,4 +668,22 @@ impl Evented for PosixMq {
     fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
         EventedFd(&self.as_raw_fd()).deregister(poll)
     }
+}
+
+
+/// Contains information about the capacities and state of a posix message queue.
+///
+/// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
+#[derive(Clone,Copy, PartialEq,Eq, Debug)]
+pub struct Attributes {
+    /// The maximum size of messages that can be stored in the queue.
+    pub max_msg_len: usize,
+    /// The maximum number of messages in the queue.
+    pub capacity: usize,
+    /// The number of messages currently in the queue at the time the
+    /// attributes were retrieved.
+    pub current_messages: usize,
+    /// Whether the descriptor was set to nonblocking mode when
+    /// the attributes were retrieved.
+    pub nonblocking: bool,
 }

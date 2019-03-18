@@ -1,7 +1,7 @@
 use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, unlink, unlink_c, name_from_bytes};
+use posixmq::{PosixMq, OpenOptions, Attributes, unlink, unlink_c, name_from_bytes};
 
 #[cfg(feature="mio")]
 extern crate mio;
@@ -94,11 +94,65 @@ fn open_invalid_params() {
 }
 
 #[test]
+fn open_custom_capacities() {
+    let mq = OpenOptions::readonly()
+        .capacity(2)
+        .max_msg_len(100)
+        .create()
+        .open(b"/custom_capacities")
+        .unwrap();
+    let _ = posixmq::unlink(b"/custom_capacities");
+    assert_eq!(mq.attributes(), Attributes {
+        capacity: 2,
+        max_msg_len: 100,
+        current_messages: 0,
+        nonblocking: false,
+    });
+}
+
+#[test]
 fn create_and_remove() {
     let mq = OpenOptions::readwrite().create_new().open("/flash");
     assert!(mq.is_ok());
     assert!(unlink("/flash").is_ok());
     assert_eq!(PosixMq::open("/flash").unwrap_err().kind(), ErrorKind::NotFound);
+}
+
+
+#[test]
+fn is_not_nonblocking() {
+    let mq = PosixMq::create("/is_not_nonblocking").unwrap();
+    let _ = posixmq::unlink("/is_not_nonblocking");
+    assert!(!mq.is_nonblocking());
+    // TODO test that send and receive blocks?
+}
+
+#[test]
+fn is_nonblocking() {
+    let mq = OpenOptions::readwrite()
+        .nonblocking()
+        .capacity(1)
+        .max_msg_len(1)
+        .create()
+        .open("/is_nonblocking")
+        .unwrap();
+    let _ = posixmq::unlink("/is_nonblocking");
+
+    assert!(mq.is_nonblocking());
+    assert_eq!(mq.receive(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    mq.send(5, b"e").unwrap();
+    assert_eq!(mq.send(6, b"f").unwrap_err().kind(), ErrorKind::WouldBlock);
+}
+
+#[test]
+fn change_nonblocking() {
+    let mq = PosixMq::create("/change_nonblocking").unwrap();
+    let _ = posixmq::unlink("/change_nonblocking");
+    mq.set_nonblocking(true).unwrap();
+    assert!(mq.is_nonblocking());
+    assert_eq!(mq.receive(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    mq.set_nonblocking(false).unwrap();
+    assert!(!mq.is_nonblocking());
 }
 
 #[test]

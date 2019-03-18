@@ -22,6 +22,7 @@ task:
     - kldload mqueuefs
     - cargo test -- --test-threads 1
     - cargo test --features mio -- --test-threads 1
+    - cargo run --example default_capacities
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -40,6 +41,7 @@ task:
   test_script:
     - cargo test -- --test-threads 1
     - cargo test --features mio -- --test-threads 1
+    - cargo run --example default_capacities
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
