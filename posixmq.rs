@@ -210,7 +210,6 @@
 //! # Missing and planned features
 //!
 //! * `mq_timedsend()` and `mq_timedreceive()` wrappers.
-//! * `Iterator`-implementing struct that calls `receive()`
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
 //! * tmpfile equivalent
@@ -646,6 +645,15 @@ impl PosixMq {
         }
     }
 
+    /// Returns an `Iterator` which calls `receive()` repeatedly with an
+    /// appropriately sized buffer.
+    ///
+    /// If the message queue is opened in non-blocking mode the iterator can be
+    /// used to drain the queue. Otherwise it will block and never end.
+    pub fn iter<'a>(&'a self) -> Iter<'a> {
+        self.into_iter()
+    }
+
 
     /// Get information about the state of the message queue.
     ///
@@ -889,6 +897,29 @@ impl IntoRawFd for PosixMq {
 }
 
 
+impl IntoIterator for PosixMq {
+    type Item = (u32, Vec<u8>);
+    type IntoIter = IntoIter;
+    fn into_iter(self) -> IntoIter {
+        IntoIter {
+            max_msg_len: self.attributes().max_msg_len,
+            mq: self,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a PosixMq {
+    type Item = (u32, Vec<u8>);
+    type IntoIter = Iter<'a>;
+    fn into_iter(self) -> Iter<'a> {
+        Iter {
+            max_msg_len: self.attributes().max_msg_len,
+            mq: self,
+        }
+    }
+}
+
+
 impl Debug for PosixMq {
     // Only show "fd" on operating systems where mqd_t is known to contain one.
     #[cfg(any(
@@ -959,5 +990,57 @@ impl Evented for PosixMq {
 
     fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
         EventedFd(&self.as_raw_fd()).deregister(poll)
+    }
+}
+
+
+/// An `Iterator` that [`receive()`](struct.PosixMq.html#method.receive)s
+/// messages from a borrowed [`PosixMq`](struct.PosixMq.html).
+///
+/// Iteration ends when a `receive()` fails with a `WouldBlock` error, but is
+/// infinite if the descriptor is opened in blocking mode.
+///
+/// # Panics
+///
+/// `next()` can panic if an error of type other than `WouldBlock` is produced.
+pub struct Iter<'a> {
+    mq: &'a PosixMq,
+    /// Cached
+    max_msg_len: usize,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (u32, Vec<u8>);
+    fn next(&mut self) -> Option<(u32, Vec<u8>)> {
+        let mut buf = vec![0; self.max_msg_len];
+        match self.mq.receive(&mut buf) {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) => panic!("Cannot receive from posix message queue: {}", e),
+            Ok((priority, len)) => {
+                buf.truncate(len);
+                Some((priority, buf))
+            }
+        }
+    }
+}
+
+/// An `Iterator` that [`receive()`](struct.PosixMq.html#method.receive)s
+/// messages from an owned [`PosixMq`](struct.PosixMq.html).
+///
+/// Iteration ends when a `receive()` fails with a `WouldBlock` error, but is
+/// infinite if the descriptor is opened in blocking mode.
+///
+/// # Panics
+///
+/// `next()` can panic if an error of type other than `WouldBlock` is produced.
+pub struct IntoIter {
+    mq: PosixMq,
+    max_msg_len: usize,
+}
+
+impl Iterator for IntoIter {
+    type Item = (u32, Vec<u8>);
+    fn next(&mut self) -> Option<(u32, Vec<u8>)> {
+        Iter{mq: &self.mq, max_msg_len: self.max_msg_len}.next()
     }
 }

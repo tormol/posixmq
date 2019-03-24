@@ -186,6 +186,39 @@ fn send_and_receive() {
 }
 
 #[test]
+fn iterators() {
+    let mq = OpenOptions::readwrite().nonblocking().create().open("/iterable").unwrap();
+    let _ = posixmq::unlink("/iterable");
+
+    for n in 0..8 {
+        mq.send(n, n.to_string().as_bytes()).unwrap()
+    }
+    assert_eq!(mq.iter().next(), Some((7, "7".to_string().into_bytes())));
+    for (priority, message) in &mq {
+        assert_eq!(String::from_utf8(message).unwrap().parse::<u32>().unwrap(), priority);
+    }
+    mq.set_nonblocking(false).unwrap();
+    for fruit in &["apple", "pear", "watermelon"] {
+        mq.send(fruit.len() as u32, fruit.as_bytes()).unwrap();
+    }
+    let mut iter = mq.into_iter();
+    assert_eq!(iter.next(), Some((10, b"watermelon".to_vec())));
+    assert_eq!(iter.next(), Some((5, b"apple".to_vec())));
+    assert_eq!(iter.next(), Some((4, b"pear".to_vec())));
+}
+
+#[test]
+#[should_panic]
+fn iterator_panics_if_writeonly() {
+    let mq = OpenOptions::writeonly().create().open("writeonly").unwrap();
+    let _ = unlink("writeonly");
+    for (_, _) in mq {
+
+    }
+}
+
+
+#[test]
 fn name_from_bytes_normal() {
     use std::borrow::Cow;
 
