@@ -642,6 +642,12 @@ impl Drop for PosixMq {
     }
 }
 
+// On some platforms mqd_t is a pointer, so Send and Sync aren't
+// auto-implemented there. While I don't feel certain enough to
+// blanket-implement Sync, I can't see why an implementation would make it UB
+// to move operations to another thread.
+unsafe impl Send for PosixMq {}
+
 
 /// Make posix message queues pollable by mio.
 ///
