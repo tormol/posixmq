@@ -66,26 +66,26 @@
 //! # extern crate mio;
 //! # use mio::{Events, PollOpt, Poll, Ready, Token};
 //! # use std::io::ErrorKind;
-//! # use std::sync::Arc;
 //! # use std::thread;
 //! // set up queue
-//! let mq = posixmq::OpenOptions::readwrite()
+//! let receiver = posixmq::OpenOptions::readonly()
 //!     .nonblocking()
 //!     .capacity(3)
 //!     .max_msg_len(100)
 //!     .create_new()
 //!     .open("/mio")
 //!     .unwrap();
-//! let _ = posixmq::unlink("/mio");
 //!
-//! // spawn a thread to send something
-//! let mq = Arc::new(mq);
-//! let sender = mq.clone(); // clones the Arc;
-//! let sender = thread::spawn(move|| sender.send(0, b"Hello").unwrap() );
+//! // send something from another thread (or process)
+//! let sender = thread::spawn(move|| {
+//!     let sender = posixmq::OpenOptions::writeonly().open("/mio").unwrap();
+//!     posixmq::unlink("/mio").unwrap();
+//!     sender.send(0, b"async").unwrap();
+//! });
 //!
 //! // set up mio and register
 //! let poll = Poll::new().unwrap();
-//! poll.register(&*mq, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
+//! poll.register(&receiver, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
 //! let mut events = Events::with_capacity(10);
 //!
 //! poll.poll(&mut events, None).unwrap();
@@ -93,17 +93,19 @@
 //!     if event.token() == Token(0) {
 //!         loop {
 //!            let mut buf = [0; 100];
-//!            match mq.receive(&mut buf) {
+//!            match receiver.receive(&mut buf) {
 //!                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
 //!                Err(e) => panic!("Error receiving message: {}", e),
 //!                Ok((priority, len)) => {
 //!                    assert_eq!(priority, 0);
-//!                    assert_eq!(&buf[..len], b"Hello");
+//!                    assert_eq!(&buf[..len], b"async");
 //!                }
 //!            }
 //!         }
 //!     }
 //! }
+//!
+//! sender.join().unwrap();
 //! ```
 //!
 //! See the examples/ directory for more.
