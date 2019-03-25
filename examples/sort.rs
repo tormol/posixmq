@@ -1,4 +1,5 @@
 //! Uses a queue to sort command line arguments based on thir length.
+
 extern crate posixmq;
 
 use std::env::args_os;

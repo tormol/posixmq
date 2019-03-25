@@ -1,4 +1,5 @@
 //! Receives messages from a queue, printing them and their priority to stdout.
+
 extern crate posixmq;
 
 use std::env::args_os;

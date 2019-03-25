@@ -1,10 +1,12 @@
 [package]
 name = "posixmq"
 version = "0.1.0"
-description = "A posix message queue wrapper with optional mio support"
+description = "An idiomatic posix message queue wrapper for Linux and FreeBSD with optional mio integration"
+readme = "README.md"
+repository = "https://github.com/tormol/posixmq"
 license = "Apache-2.0 / MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
-keywords = ["posix", "mq", "mqueue", "queue", "posix_mq"]
+keywords = ["posix", "mq", "mqueue", "queue"]
 categories = ["os::unix-apis", "asynchronous"]
 edition = "2018"
 

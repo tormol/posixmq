@@ -1,4 +1,5 @@
 //! reads messages from stdin or the command line and sends them to a queue.
+
 extern crate posixmq;
 
 use std::env::args_os;

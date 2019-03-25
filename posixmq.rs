@@ -6,34 +6,181 @@
  * copied, modified, or distributed except according to those terms.
  */
 
-//! Posix message queue wrapper with optional mio support.
+//! Posix message queue wrapper with optional mio integration.
 //!
-//! Posix message queues are like pipes, but message-oriented and the messages
-//! are sorted based on an additional priority parameter.
-//! For a longer introduction, see `man mq_overview`.
+//! Posix message queues are like pipes, but message-oriented which makes them
+//! safe to read by multiple processes. Messages are sorted based on an
+//! additional priority parameter. Queues are not placed in the normal file
+//! system, but uses a separate, flat namespace. Normal file permissions still
+//! apply though.
+//! For a longer introduction, see `man mq_overview` or `man mq`.
 //!
 //! They are not all that useful, as only Linux and some BSDs implement them,
-//! and on Linux they are limitied by default to a capacity of only ten messages.
+//! and even there you might be limited to creating queues with a capacity of
+//! no more than 10 messages at a time.
 //!
-//! See the examples/ directory for examples.
+//! # Examples
 //!
-//! # Supported operating systems
+//! Send a couple messages:
+//! ```
+//! use posixmq::PosixMq;
 //!
-//! * Linux >= 2.6.26: all features, tested on CI.
-//! * FreeBSD 11+: everything except `FromRawFd` and `IntoRawFd`, tested on CI.
-// (11 added a function which made `AsRawFd` and thereby mio `Evented` possible)
-// [r306588](https://github.com/freebsd/freebsd/commit/6e61756bbf70) merged on 2016-10-09
-//! * NetBSD: untested but all features cross-compile and might work.
-//! * Fuchsia: untested but default features cross-compile.
-//! * DragonFlyBSD: untested, only basic features (no `AsRawFd` or mio integration)
-//! * Solaris / Illumos: The OS should have them, but libc doesn't export symbols
-//! * Not Windows, macOS, Android, OpenBSD or Rumprun. (doesn't have posix message queues)
-//! * Other: [maybe if the libc crate has the symbols](https://github.com/rust-lang/libc/search?q=mq_open&unscoped_q=mq_open) core features might work.
+//! // open the message queue if it exists, or create it if it doesn't.
+//! // names should start with a slash and have no more slashes.
+//! let mq = PosixMq::create("/hello_posixmq").unwrap();
+//! mq.send(0, b"message").unwrap();
+//! // messages with equal priority will be received in order
+//! mq.send(0, b"queue").unwrap();
+//! // but this message has higher priority and will be received first
+//! mq.send(10, b"Hello,").unwrap();
+//! ```
 //!
-//! This library will try to compile most features even if the target OS
-//! doesn't support posix message queues. `AsRawFd`, `FromRawFd` and `IntoRawFd`
-//! are implemented as casts for all platforms where `mqd_t` is an `int`, based
-//! on the asumption that it's a file descriptor, which is the case on Linux.
+//! and receive them:
+//! ```
+//! use posixmq::PosixMq;
+//!
+//! // open the queue read-only, or fail if it doesn't exist.
+//! let mq = PosixMq::open("/hello_posixmq").unwrap();
+//! // delete the message queue when you don't need to open it again.
+//! // otherwise it will remain until the system is rebooted, consuming
+//! posixmq::unlink("/hello_posixmq").unwrap();
+//!
+//! // the receive buffer must be at least as big as the biggest possible message,
+//! // or you will not be allowed to receive anything.
+//! let mut buf = vec![0; mq.attributes().max_msg_len];
+//! assert_eq!(mq.receive(&mut buf).unwrap(), (10, "Hello,".len()));
+//! assert_eq!(mq.receive(&mut buf).unwrap(), (0, "message".len()));
+//! assert_eq!(mq.receive(&mut buf).unwrap(), (0, "queue".len()));
+//! assert_eq!(&buf[..5], b"queue");
+//!
+//! // check that there are no more messages
+//! assert_eq!(mq.attributes().current_messages, 0);
+//! // note that acting on this value is race-prone. A better way to do this
+//! // would be to switch our descriptor to non-blocking mode, and check for
+//! // an error of type `ErrorKind::WouldBlock`.
+//! ```
+//!
+//! With mio (and `features = ["mio"]`):
+#![cfg_attr(feature="mio", doc="```")]
+#![cfg_attr(not(feature="mio"), doc="```no_compile")]
+//! # extern crate mio;
+//! # use mio::{Events, PollOpt, Poll, Ready, Token};
+//! # use std::io::ErrorKind;
+//! # use std::sync::Arc;
+//! # use std::thread;
+//! // set up queue
+//! let mq = posixmq::OpenOptions::readwrite()
+//!     .nonblocking()
+//!     .capacity(3)
+//!     .max_msg_len(100)
+//!     .create_new()
+//!     .open("/mio")
+//!     .unwrap();
+//! let _ = posixmq::unlink("/mio");
+//!
+//! // spawn a thread to send something
+//! let mq = Arc::new(mq);
+//! let sender = mq.clone(); // clones the Arc;
+//! let sender = thread::spawn(move|| sender.send(0, b"Hello").unwrap() );
+//!
+//! // set up mio and register
+//! let poll = Poll::new().unwrap();
+//! poll.register(&*mq, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
+//! let mut events = Events::with_capacity(10);
+//!
+//! poll.poll(&mut events, None).unwrap();
+//! for event in &events {
+//!     if event.token() == Token(0) {
+//!         loop {
+//!            let mut buf = [0; 100];
+//!            match mq.receive(&mut buf) {
+//!                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
+//!                Err(e) => panic!("Error receiving message: {}", e),
+//!                Ok((priority, len)) => {
+//!                    assert_eq!(priority, 0);
+//!                    assert_eq!(&buf[..len], b"Hello");
+//!                }
+//!            }
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! See the examples/ directory for more.
+//!
+//! # Portability
+//!
+//! While the p in POSIX stands for Portable, that is not a fitting description
+//! of their message queues; Support is spotty even among *nix OSes.
+//! **Windows, macOS, OpenBSD, Android, ios, Rumprun and Emscripten doesn't
+//! support posix message queues at all.**
+//!
+//! ## Compatible operating systems and features
+//!
+//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Fuchsia
+//! -|-|-|-|-|-|-|-
+//! core features | Yes | Yes | buggy | Yes | No | Yes
+//! mio `Evented` | Yes | Yes | useless | No | No | No
+//! `Sync` | Yes | No | Yes | No | No | Yes
+//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | No | No | Yes
+//! `AsRawFd` | Yes | Yes | Yes | No | No | Yes
+//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | No | No | Yes
+//! Tested? | Yes, CI | Yes, CI | Manually | No | No | Cross-compiles
+//!
+//! This library will fail to compile if the target OS doesn't support posix
+//! message queues at all.
+//!
+//! Feature explanations:
+//!
+//! * `FromRawFd+IntoRawFd`: For this to compile, the inner `mqd_t` type must
+//!   an `int` typedef, and bad things might happen if it doesn't represent a
+//!   file descriptor. These impls are currently on by default and only
+//!   disabled when known not to work.
+//! * `Sync`: not auto-implemented when `mqd_t` is a pointer, and I haven't
+//!   convinced myself it's safe even though I expect it to be. When it's just
+//!   an `int` fd I assume the OS will treat different threads equivalent to
+//!   different processes.
+//! * `AsRawFd`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
+//!   [a function](https://github.com/freebsd/freebsd/commit/6e61756bbf70)
+//!   which lets one get a file descriptor for a `mqd_t`. This is required for
+//!   querying or changing cloexec, and also for reliably setting it.
+//! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
+//!   This does not guarantee that the polling mechanism used by mio supports
+//!   posix message queues though.
+//!
+//! On Linux, message queues and their permissions can be viewed in
+//! `/dev/mqueue/`. The kernel *can* be compiled to not support posix message
+//! queues, so it's not guaranteed to always work. (sch as on Adroid)
+//!
+//! On FreeBSD, the kernel module responsible for posix message queues
+//! is not loaded by default; Run `kldload mqueuefs` as root to enable it.
+//! To list queues, the file system must additionally be mounted first:
+//! `mount -t mqueuefs null $somewhere`.
+//! Versions before 11 do not have the function used to get a file descriptor,
+//! so this library will not compile there.
+//!
+//! While Illumos / Solaris [support posix message queues](https://github.com/illumos/illumos-gate/blob/master/usr/src/head/mqueue.h),
+//! this libray won't work there because the libc crate [doesn't have bindings](https://github.com/rust-lang/libc/search?q=mq_open&unscoped_q=mq_open).
+//!
+//! ## OS-dependent restrictions and default values
+//!
+//! Not even limiting oneself to the core features is enough to guarantee
+//! portability!
+//!
+//! &nbsp; | Linux | FreeBSD | NetBSD
+//! -|-|-|-
+//! max priority | 32767 | 63 | **31**
+//! default capacity | 10 | 10 | 32
+//! default max_msg_len | 8192 | 1024 | 992
+//! max capacity | **10**\* | 100 | 512
+//! max max_msg_len | **8192**\* | 16384 | 16384
+//! allows empty messages | Yes | Yes | **No**
+//! enforces name rules | Yes | Yes | *No*
+//! allows "/." and "/.." | No | No | *Yes*
+//!
+//! On Linux the listed size limits only apply to unprivileged processes.
+//! As root there instead appears to be a combined limit on memory usage of the
+//! form `capacity*(max_msg_len+k)`, but is several times higher than 10*8192.
 //!
 //! # Differences from the C API
 //!
@@ -43,28 +190,29 @@
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
 //!
-//! # Missing features / wishlist / TODO
+//! # Missing and planned features
 //!
-//! * `send_timeout()` (`mq_timedsend()`)
-//! * `receive_timeout()` (`mq_timedreceive()`)
+//! * `mq_timedsend()` and `mq_timedreceive()` wrappers.
 //! * `try_clone()`
-//! * `Iterator` struct that calls `receive()`
+//! * `Iterator`-implementing struct that calls `receive()`
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
-//! * Getting and possibly changing limits and default values
+//! * tmpfile equivalent
+//! * Querying and possibly changing limits and default values
 //! * Struct that deletes the message queue when dropped
 //! * Test or check more platforms on CI
-//! * Examples in the documentation
 //! * Support more OSes?
 //! * `mq_notify()`?
 //!
-//! Please open an issue (or pull request) if you want any of them.
-//
-// # Why no `#![no_std]`-mode
+//! Please open an issue if you want any of them.
+
+// # Why this crate requires `std`
 //
 // The libc crate doesn't expose `errno` in a portable way,
-// so `std::io::Error::last_err()` is required. Depending on std also means the
-// functions can return `io::Error` instead of some custom type.
+// so `std::io::Error::last_err()` is required to give errors
+// more specific than "something went wrong".
+// Depending on std also means that functions can use `io::Error` and
+// `time::Instant` instead of custom types.
 
 use std::{io, mem, ptr};
 use std::borrow::Cow;
@@ -274,6 +422,8 @@ impl OpenOptions {
 
     /// Open a queue with the specified options.
     ///
+    /// If the name doesn't start with a '/', one will be prepended.
+    ///
     /// # Errors
     ///
     /// * Queue doesn't exist (ENOENT) => `ErrorKind::NotFound`
@@ -282,6 +432,8 @@ impl OpenOptions {
     /// * Not permitted to open in this mode (EACCESS) => `ErrorKind::PermissionDenied`
     /// * More than one '/' in name (EACCESS) => `ErrorKind::PermissionDenied`
     /// * Invalid capacities (EINVAL) => `ErrorKind::InvalidInput`
+    /// * Capacities too high (EMFILE) => `ErrorKind::Other`
+    /// * Posix message queues are disabled (ENOSYS) => `ErrorKind::Other`
     /// * Name contains '\0' => `ErrorKind::InvalidInput`
     /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
@@ -290,7 +442,11 @@ impl OpenOptions {
         name_to_cstring(name.as_ref()).and_then(|name| self.open_c(&name) )
     }
 
-    /// Open a queue with the specified options and without inspecting `name`.
+    /// Open a queue with the specified options and without inspecting `name`
+    /// or allocating.
+    ///
+    /// This can on NetBSD be used to access message queues with names that
+    /// doesn't start with a '/'.
     ///
     /// # Errors
     ///
@@ -300,6 +456,7 @@ impl OpenOptions {
     /// * Not permitted to open in this mode (EACCESS) => `ErrorKind::PermissionDenied`
     /// * More than one '/' in name (EACCESS) => `ErrorKind::PermissionDenied`
     /// * Invalid capacities (EINVAL) => `ErrorKind::InvalidInput`
+    /// * Posix message queues are disabled (ENOSYS) => `ErrorKind::Other`
     /// * Name is empty (EINVAL) => `ErrorKind::InvalidInput`
     /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
@@ -315,9 +472,9 @@ impl OpenOptions {
 /// # Errors
 ///
 /// * Queue doesn't exist (ENOENT) => `ErrorKind::NotFound`
-/// * Name is just "/" (ENOENT) or is empty => `ErrorKind::NotFound`??
+/// * Name is invalid (ENOENT or EACCESS) => `ErrorKind::NotFound` or `ErrorKind::PermissionDenied`
 /// * Not permitted to delete the queue (EACCES) => `ErrorKind::PermissionDenied`
-/// * More than one '/' in name (EACCESS) => `ErrorKind::PermissionDenied`
+/// * Posix message queues are disabled (ENOSYS) => `ErrorKind::Other`
 /// * Name contains '\0' bytes => `ErrorKind::InvalidInput`
 /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
 /// * Possibly other
@@ -325,15 +482,20 @@ pub fn unlink<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
     name_to_cstring(name.as_ref()).and_then(|name| unlink_c(&name) )
 }
 
-/// Delete a posix message queue, without inspecting `name`.
+/// Delete a posix message queue, without inspecting `name` or allocating.
+///
+/// This can on NetBSD be used to access message queues with names that
+/// doesn't start with a '/'.
 ///
 /// # Errors
 ///
 /// * Queue doesn't exist (ENOENT) => `ErrorKind::NotFound`
-/// * Name is just "/" (ENOENT) => `ErrorKind::NotFound`??
 /// * Not permitted to delete the queue (EACCES) => `ErrorKind::PermissionDenied`
+/// * Posix message queues are disabled (ENOSYS) => `ErrorKind::Other`
 /// * More than one '/' in name (EACCESS) => `ErrorKind::PermissionDenied`
-/// * Name is empty or does not start with a slash (EINVAL) => `ErrorKind::InvalidInput`
+/// * Name is empty (EINVAL) => `ErrorKind::InvalidInput`
+/// * Name is invalid (ENOENT, EACCESS or EINVAL) => `ErrorKind::NotFound`,
+///   `ErrorKind::PermissionDenied` or `ErrorKind::InvalidInput`
 /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
 /// * Possibly other
 pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
@@ -417,10 +579,15 @@ impl PosixMq {
 
     /// Add a message to the queue.
     ///
+    /// For maximum portability, avoid using priorities >= 32 or sending
+    /// zero-length messages.
+    ///
     /// # Errors
     ///
     /// * Queue is full and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
-    /// * The message is too big for the queue (EMSGSIZE) => `ErrorKind::Other`
+    /// * Message is too big for the queue (EMSGSIZE) => `ErrorKind::Other`
+    /// * OS doesn't allow empty messages (EMSGSIZE) => `ErrorKind::Other`
+    /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
     /// * Possibly other => `ErrorKind::Other`
     pub fn send(&self,  priority: u32,  msg: &[u8]) -> Result<(), io::Error> {
         let bptr = msg.as_ptr() as *const i8;
@@ -437,6 +604,8 @@ impl PosixMq {
     }
 
     /// Take the message with the highest priority from the queue.
+    ///
+    /// The buffer must be at least as big as the maximum message length.
     ///
     /// # Errors
     ///
