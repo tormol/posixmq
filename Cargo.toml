@@ -11,7 +11,7 @@ categories = ["os::unix-apis", "asynchronous"]
 edition = "2018"
 
 [dependencies]
-libc = "0.2.35" # .35 added symbols for (Free|Net|Dragonfly)BSD
+libc = "0.2.51" # .51 added FreeBSD's mq_getfd_np()
 mio = {version = "0.6.14", optional=true} # .13 drags in libc 0.1 when built with -Z minimal-versions
 
 [lib]

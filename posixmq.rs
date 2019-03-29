@@ -233,12 +233,8 @@ use libc::{mq_attr, mq_getattr, mq_setattr};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
-
 #[cfg(target_os="freebsd")]
-extern "C" {
-    // not in libc (yet)
-    fn mq_getfd_np(mq: mqd_t) -> c_int;
-}
+use libc::mq_getfd_np;
 
 #[cfg(feature="mio")]
 extern crate mio;
