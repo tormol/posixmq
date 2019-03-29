@@ -123,7 +123,7 @@
 //! -|-|-|-|-|-|-|-
 //! core features | Yes | Yes | buggy | Yes | No | Yes
 //! mio `Evented` | Yes | Yes | useless | No | No | No
-//! `Sync` | Yes | No | Yes | No | No | Yes
+//! `Sync` | Yes | Yes | Yes | No | No | Yes
 //! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | No | No | Yes
 //! `AsRawFd` | Yes | Yes | Yes | No | No | Yes
 //! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | No | No | Yes
@@ -138,12 +138,14 @@
 //!   an `int` typedef, and bad things might happen if it doesn't represent a
 //!   file descriptor. These impls are currently on by default and only
 //!   disabled when known not to work.
-//! * `Sync`: not auto-implemented when `mqd_t` is a pointer, and I haven't
-//!   convinced myself it's safe even though I expect it to be. When it's just
-//!   an `int` fd I assume the OS will treat different threads equivalent to
-//!   different processes.
+//! * `Sync`: I don't feel certain that the spec requires implementations to
+//!   be completely thread-safe, and the trait is therefore not blanket-
+//!   implemented. On operating systems where `mqd_t` is an `int` I assume it
+//!   represents a file descriptor and is passed directly to the kernel. On
+//!   FreeBSD `mqd_t` is a pointer to a struct, but the functions called by
+//!   this library only reads the contained file descriptor.
 //! * `AsRawFd`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
-//!   [a function](https://github.com/freebsd/freebsd/commit/6e61756bbf70)
+//!   [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
 //!   which lets one get a file descriptor for a `mqd_t`. This is required for
 //!   querying or changing cloexec, and also for reliably setting it.
 //! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
@@ -814,6 +816,15 @@ impl Drop for PosixMq {
 // blanket-implement Sync, I can't see why an implementation would make it UB
 // to move operations to another thread.
 unsafe impl Send for PosixMq {}
+
+// On FreeBSD, mqd_t is a `struct{int fd, struct sigev_node* node}*`,
+// but the sigevent is only accessed by `mq_notify()`, so it's thread-safe
+// as long as that function requires `&mut self` or isn't exposed.
+//  src: https://svnweb.freebsd.org/base/head/lib/librt/mq.c?view=markup
+// Linux, NetBSD, DragonFlyBSD and Fuchsia gets Sync auto-implemented because
+// mqd_t is an int.
+#[cfg(target_os="freebsd")]
+unsafe impl Sync for PosixMq {}
 
 
 /// Make posix message queues pollable by mio.

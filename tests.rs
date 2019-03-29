@@ -341,7 +341,7 @@ fn into_fd_doesnt_drop() {
 }
 
 // TODO check whether mqd_t is threadsafe on those OSes
-#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+#[cfg(not(target_os="dragonflybsd"))]
 #[test]
 fn is_send_and_sync() {
     fn is_send<T:Send>() -> bool {true}
