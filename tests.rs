@@ -177,7 +177,6 @@ fn change_nonblocking() {
 }
 
 #[test]
-#[cfg(not(target_os="dragonflybsd"))]
 fn is_cloexec() {
     let mq = PosixMq::create("/is_cloexec").unwrap();
     let _ = posixmq::unlink("/is_cloexec");
@@ -185,7 +184,6 @@ fn is_cloexec() {
 }
 
 #[test]
-#[cfg(not(target_os="dragonflybsd"))]
 fn is_not_cloexec() {
     let mq = OpenOptions::writeonly()
         .not_cloexec()
@@ -197,7 +195,6 @@ fn is_not_cloexec() {
 }
 
 #[test]
-#[cfg(not(target_os="dragonflybsd"))]
 fn change_cloexec() {
     let mq = PosixMq::create("/change_cloexec").unwrap();
     let _ = posixmq::unlink("/change_cloexec");
@@ -324,7 +321,7 @@ fn drop_closes() {
     assert_eq!(mq_fd, with_fd.as_raw_fd());
 }
 
-#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+#[cfg(not(target_os="freebsd"))]
 #[test]
 fn into_fd_doesnt_drop() {
     use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -340,8 +337,6 @@ fn into_fd_doesnt_drop() {
     }
 }
 
-// TODO check whether mqd_t is threadsafe on those OSes
-#[cfg(not(target_os="dragonflybsd"))]
 #[test]
 fn is_send_and_sync() {
     fn is_send<T:Send>() -> bool {true}

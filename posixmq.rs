@@ -122,11 +122,11 @@
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Fuchsia
 //! -|-|-|-|-|-|-|-
 //! core features | Yes | Yes | buggy | Yes | No | Yes
-//! mio `Evented` | Yes | Yes | useless | No | No | No
-//! `Sync` | Yes | Yes | Yes | No | No | Yes
-//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | No | No | Yes
-//! `AsRawFd` | Yes | Yes | Yes | No | No | Yes
-//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | No | No | Yes
+//! mio `Evented` | Yes | Yes | useless | ? | No | No
+//! `Sync` | Yes | Yes | Yes | Yes | No | Yes
+//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | Yes
+//! `AsRawFd` | Yes | Yes | Yes | Yes | No | Yes
+//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | Yes | No | Yes
 //! Tested? | Yes, CI | Yes, CI | Manually | No | No | Cross-compiles
 //!
 //! This library will fail to compile if the target OS doesn't support posix
@@ -137,7 +137,7 @@
 //! * `FromRawFd+IntoRawFd`: For this to compile, the inner `mqd_t` type must
 //!   an `int` typedef, and bad things might happen if it doesn't represent a
 //!   file descriptor. These impls are currently on by default and only
-//!   disabled when known not to work.
+//!   disabled on operating systems `mqd_t` is known not to be an `int`.
 //! * `Sync`: I don't feel certain that the spec requires implementations to
 //!   be completely thread-safe, and the trait is therefore not blanket-
 //!   implemented. On operating systems where `mqd_t` is an `int` I assume it
@@ -223,9 +223,8 @@ use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
-#[cfg(not(target_os="dragonflybsd"))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+#[cfg(not(target_os="freebsd"))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
@@ -553,7 +552,6 @@ impl PosixMq {
         // TODO optimize by storing platform behaviour in a global atomic variable
         // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
         // and if open() created a queue, the caller must be able to differentiate.
-        #[cfg(not(target_os="dragonflybsd"))]
         let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
 
         // TODO check if O_NONBLOCK was actually set (NetBSD ignores it)
@@ -698,7 +696,6 @@ impl PosixMq {
     /// Retrieving this flag should only fail if the queue is already closed.
     /// In that case `true` is returned because the queue will not be open
     /// after `exec`ing.
-    #[cfg(not(target_os="dragonflybsd"))]
     pub fn is_cloexec(&self) -> bool {
         let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
         if flags == -1 {
@@ -724,7 +721,6 @@ impl PosixMq {
     /// This function should only fail if the underlying file descriptor has
     /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
     /// and not reused for something else yet.
-    #[cfg(not(target_os="dragonflybsd"))]
     pub unsafe fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
         // Race-prone but portable; Linux and the BSDs have fcntl(, F_IOCLEX)
         // but fuchsia and solarish doesn't.
@@ -754,13 +750,11 @@ impl PosixMq {
 ///
 /// Note that the queue will be closed when the returned `PosixMq` goes out
 /// of scope / is dropped.
-///
-/// This impl is not available on DragonFlyBSD.
-#[cfg(not(target_os="dragonflybsd"))]
 impl AsRawFd for PosixMq {
-    // On Linux, `mqd_t` is a plain file descriptor and can trivially be convverted,
-    // but this is not guaranteed, nor the case on FreeBSD or DragonFlyBSD.
-    #[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+    // On Linux, NetBSD and DragonFlyBSD, `mqd_t` is a plain file descriptor
+    // and can trivially be convverted, but this is not guaranteed, nor the
+    // case on FreeBSD.
+    #[cfg(not(target_os="freebsd"))]
     fn as_raw_fd(&self) -> RawFd {
         self.mqd as RawFd
     }
@@ -776,7 +770,7 @@ impl AsRawFd for PosixMq {
 ///
 /// Note that the queue will be closed when the returned `PosixMq` goes out
 /// of scope / is dropped.
-#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+#[cfg(not(target_os="freebsd"))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         PosixMq { mqd: fd as mqd_t }
@@ -784,7 +778,7 @@ impl FromRawFd for PosixMq {
 }
 
 /// Convert the `PosixMq` into a raw file descriptor.
-#[cfg(not(any(target_os="freebsd", target_os="dragonflybsd")))]
+#[cfg(not(target_os="freebsd"))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
         let fd = self.mqd;
@@ -794,12 +788,19 @@ impl IntoRawFd for PosixMq {
 }
 
 impl Debug for PosixMq {
-    #[cfg(any(target_os="linux", target_os="freebsd"))]
+    // Only show "fd" on operating systems where mqd_t is known to contain one.
+    #[cfg(any(
+        target_os="linux", target_os="freebsd",
+        target_os="netbsd", target_os="dragonflybsd",
+    ))]
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
         write!(fmtr, "PosixMq{{ fd: {} }}", self.as_raw_fd())
     }
 
-    #[cfg(not(any(target_os="linux", target_os="freebsd")))]
+    #[cfg(not(any(
+        target_os="linux", target_os="freebsd",
+        target_os="netbsd", target_os="dragonflybsd",
+    )))]
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
         write!(fmtr, "PosixMq{{}}")
     }
