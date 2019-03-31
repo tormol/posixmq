@@ -228,7 +228,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
-use libc::{c_int, c_uint, mode_t};
+use libc::{c_int, c_uint, c_char, mode_t};
 #[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
 use libc::c_long;
 use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
@@ -590,7 +590,7 @@ impl PosixMq {
     /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
     /// * Possibly other => `ErrorKind::Other`
     pub fn send(&self,  priority: u32,  msg: &[u8]) -> Result<(), io::Error> {
-        let bptr = msg.as_ptr() as *const i8;
+        let bptr = msg.as_ptr() as *const c_char;
         loop {// catch EINTR and retry
             let ret = unsafe { mq_send(self.mqd, bptr, msg.len(), priority as c_uint) };
             if ret == 0 {
@@ -613,7 +613,7 @@ impl PosixMq {
     /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
     pub fn receive(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
-        let bptr = msgbuf.as_mut_ptr() as *mut i8;
+        let bptr = msgbuf.as_mut_ptr() as *mut c_char;
         let mut priority = 0 as c_uint;
         loop {// catch EINTR and retry
             let len = unsafe { mq_receive(self.mqd, bptr, msgbuf.len(), &mut priority) };
