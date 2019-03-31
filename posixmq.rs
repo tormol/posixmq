@@ -228,7 +228,9 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
-use libc::{c_int, c_uint, c_long, mode_t};
+use libc::{c_int, c_uint, mode_t};
+#[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
+use libc::c_long;
 use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{mq_attr, mq_getattr, mq_setattr};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
@@ -511,9 +513,9 @@ pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
 // x86_64-unknown-linux-gnux32, where they are `long long` (to match up with
 // normal x86_64 `long`).
 // Rusts lack of implicit widening makes this peculiarity annoying.
-#[cfg(target="x86_64-unknown-linux-gnux32")]
+#[cfg(all(target_arch="x86_64", target_os="linux", target_pointer_width="32"))]
 type AttrField = i64;
-#[cfg(not(target="x86_64-unknown-linux-gnux32"))]
+#[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
 type AttrField = c_long;
 
 /// A descriptor for an open posix message queue.
