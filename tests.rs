@@ -347,7 +347,7 @@ fn is_send_and_sync() {
 }
 
 
-#[cfg(all(feature="mio", not(target_os="netbsd")))]
+#[cfg(feature="mio")]
 #[test]
 fn mio() {
     use mio::{Poll, Events, PollOpt, Ready, Token};
