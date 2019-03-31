@@ -2,7 +2,7 @@
 
 A Rust library for working with [posix message queues](https://linux.die.net/man/7/mq_overview).
 
-[![crates.io](https://img.shields.io/crates/v/posixmq.svg)](https://crates.io/crates/posixmq) [![Build Status](https://api.cirrus-ci.com/github/tormol/posixmq.svg)](https://cirrus-ci.com/github/tormol/posixmq) [![Documentation](https://docs.rs/posixmq/badge.svg)](https://docs.rs/posixmq/)
+[![crates.io](https://img.shields.io/crates/v/posixmq.svg)](https://crates.io/crates/posixmq) [![Build Status](https://api.cirrus-ci.com/github/tormol/posixmq.svg)](https://cirrus-ci.com/github/tormol/posixmq) ![License](https://img.shields.io/crates/l/posixmq.svg) [![Documentation](https://docs.rs/posixmq/badge.svg)](https://docs.rs/posixmq/)
 
 ```rust
 let mq = posixmq::PosixMq::open("/queue")?;
