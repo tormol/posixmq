@@ -19,7 +19,7 @@ fn name_too_long() {
     assert_eq!(PosixMq::create(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
 }
 
-#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
 #[test]
 fn unlink_invalid_names() {
     assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind(), "\"\"");
@@ -32,7 +32,7 @@ fn unlink_invalid_names() {
     //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
 }
 
-#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
 #[test]
 fn open_invalid_names() {
     assert_eq!(PosixMq::create("").unwrap_err().kind(), PosixMq::create("/").unwrap_err().kind());
@@ -45,7 +45,8 @@ fn open_invalid_names() {
     //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
 }
 
-#[cfg(not(any(target_os="freebsd", target_os="netbsd")))]// FreeBSD panics and NetBSD accepts anything
+// can make FreeBSD kernel panic. NetBSD and DragonFlyBSD accepts any name
+#[cfg(not(any(target_os="freebsd", target_os="netbsd", target_os="dragonflybsd")))]
 #[test]
 fn reserved_names() {
     // That Linux and FreeBSD doesn't like /. and /.. is not that surprising
@@ -68,7 +69,7 @@ fn empty_cstr_name() {
     assert_eq!(err, ErrorKind::InvalidInput, "create empty");
 }
 
-#[cfg(not(target_os="netbsd"))] // NetBSD allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
 #[test]
 fn invalid_cstr_names() {
     use std::ffi::CStr;
