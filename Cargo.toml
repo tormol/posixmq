@@ -17,9 +17,5 @@ mio = {version = "0.6.14", optional=true} # .13 drags in libc 0.1 when built wit
 [lib]
 path = "posixmq.rs"
 
-[[test]]
-name = "test"
-path = "tests.rs"
-
 [package.metadata.docs.rs]
 features = ["mio"]
