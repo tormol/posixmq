@@ -122,12 +122,12 @@
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Fuchsia
 //! -|-|-|-|-|-|-|-
 //! core features | Yes | Yes | buggy | Yes | No | Yes
-//! mio `Evented` | Yes | Yes | useless | ? | No | No
+//! mio `Evented` | Yes | Yes | useless | Yes | No | No
 //! `Sync` | Yes | Yes | Yes | Yes | No | Yes
 //! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | Yes
 //! `AsRawFd` | Yes | Yes | Yes | Yes | No | Yes
 //! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | Yes | No | Yes
-//! Tested? | Yes, CI | Yes, CI | Manually | No | No | Cross-compiles
+//! Tested? | Yes, CI | Yes, CI | Manually | Manually | No | Cross-compiles
 //!
 //! This library will fail to compile if the target OS doesn't support posix
 //! message queues at all.
@@ -171,16 +171,16 @@
 //! Not even limiting oneself to the core features is enough to guarantee
 //! portability!
 //!
-//! &nbsp; | Linux | FreeBSD | NetBSD
-//! -|-|-|-
-//! max priority | 32767 | 63 | **31**
-//! default capacity | 10 | 10 | 32
-//! default max_msg_len | 8192 | 1024 | 992
-//! max capacity | **10**\* | 100 | 512
-//! max max_msg_len | **8192**\* | 16384 | 16384
-//! allows empty messages | Yes | Yes | **No**
-//! enforces name rules | Yes | Yes | *No*
-//! allows "/." and "/.." | No | No | *Yes*
+//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFlyBSD
+//! -|-|-|-|-
+//! max priority | 32767 | 63 | **31** | 31
+//! default capacity | 10 | 10 | 32 | 32
+//! default max_msg_len | 8192 | 1024 | 992 | 992
+//! max capacity | **10**\* | 100 | 512 | 512
+//! max max_msg_len | **8192**\* | 16384 | 16384 | 16384
+//! allows empty messages | Yes | Yes | **No** | **No**
+//! enforces name rules | Yes | Yes | *No* | *No*
+//! allows "/." and "/.." | No | No | *Yes* | *Yes*
 //!
 //! On Linux the listed size limits only apply to unprivileged processes.
 //! As root there instead appears to be a combined limit on memory usage of the
