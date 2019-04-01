@@ -27,6 +27,14 @@ fn unlink_invalid_names() {
     //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
 }
 
+#[test]
+fn invalid_permissions() {
+    let result = OpenOptions::readwrite().permissions(!0).create().open("/set_everything");
+    let _ = unlink("/set_everything");
+    // All tested operating systems ignore unknown bits
+    result.expect("unknown bits or permissions were not ignored");
+}
+
 #[cfg(not(any(
     target_os="netbsd", target_os="dragonfly", // allows any name
     target_os="illumos", target_os="solaris", // allows this
@@ -54,7 +62,6 @@ fn open_invalid_names() {
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
     let err = PosixMq::create("/foo/").expect_err("create /foo/").kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
-    //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
 }
 
 #[cfg(not(any(
