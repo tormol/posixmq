@@ -4,6 +4,10 @@ use std::io::ErrorKind;
 extern crate posixmq;
 use posixmq::{PosixMq, OpenOptions, unlink, unlink_c};
 
+fn cstr(s: &str) -> &CStr {
+    CStr::from_bytes_with_nul(s.as_bytes()).expect("_c name must have trailing '\0'")
+}
+
 #[test]
 fn name_too_long() {
     assert_eq!(unlink(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
@@ -23,10 +27,27 @@ fn unlink_invalid_names() {
     //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
 }
 
+#[cfg(not(any(
+    target_os="netbsd", target_os="dragonfly", // allows any name
+    target_os="illumos", target_os="solaris", // allows this
+)))]
+#[test]
+fn just_slash() {
+    let error = if cfg!(target_os="freebsd") {ErrorKind::InvalidInput} else {ErrorKind::NotFound};
+    assert_eq!(unlink("/").expect_err("unlink /").kind(), error, "unlink /");
+    assert_eq!(PosixMq::open("/").expect_err("open /").kind(), error, "open /");
+    assert_eq!(PosixMq::create("/").expect_err("create /").kind(), error, "create /");
+    assert_eq!(unlink_c(cstr("/\0")).expect_err("unlink_c /").kind(), error, "unlink_c /");
+    assert_eq!(
+        OpenOptions::readonly().create().open_c(cstr("/\0")).expect_err("create_c /").kind(),
+        error,
+        "create_c /"
+    );
+}
+
 #[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
 #[test]
 fn open_invalid_names() {
-    assert_eq!(PosixMq::create("").unwrap_err().kind(), PosixMq::create("/").unwrap_err().kind());
     let err = PosixMq::create("//").expect_err("create //").kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput);
     let err = PosixMq::create("/foo/bar").expect_err("create /foo/bar").kind();
@@ -36,8 +57,11 @@ fn open_invalid_names() {
     //assert_eq!(PosixMq::create("/root").unwrap_err().kind(), ErrorKind::PermissionDenied);
 }
 
-// can make FreeBSD kernel panic. NetBSD and DragonFlyBSD accepts any name
-#[cfg(not(any(target_os="freebsd", target_os="netbsd", target_os="dragonflybsd")))]
+#[cfg(not(any(
+    target_os="netbsd", target_os="dragonflybsd", // allows any name
+    target_os="illumos", target_os="solaris", // allows these
+    target_os="freebsd" // can cause kernel panic
+)))]
 #[test]
 fn reserved_names() {
     // That Linux and FreeBSD doesn't like /. and /.. is not that surprising
@@ -52,30 +76,29 @@ fn reserved_names() {
 }
 
 #[test]
-fn empty_cstr_name() {
-    let empty = CStr::from_bytes_with_nul(b"\0").unwrap();
-    let err = unlink_c(empty).expect_err("unlink empty").kind();
-    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink empty");
-    let err = OpenOptions::readonly().create().open_c(empty).expect_err("create empty").kind();
-    assert_eq!(err, ErrorKind::InvalidInput, "create empty");
+fn cstr_empty_name() {
+    let error = if cfg!(target_os="netbsd") || cfg!(target_os="dragonflybsd") {
+        ErrorKind::NotFound
+    } else {
+        ErrorKind::InvalidInput
+    };
+    assert_eq!(unlink_c(cstr("\0")).unwrap_err().kind(), error, "unlink");
+    assert_eq!(OpenOptions::readonly().open_c(cstr("\0")).unwrap_err().kind(), error, "open");
+    assert_eq!(
+        OpenOptions::readonly().create().open_c(cstr("\0")).unwrap_err().kind(),
+        ErrorKind::InvalidInput,
+        "create"
+    );
 }
 
 #[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
 #[test]
-fn invalid_cstr_names() {
-    use std::ffi::CStr;
-    fn c(s: &str) -> &CStr {
-        CStr::from_bytes_with_nul(s.as_bytes()).expect("_c name must have trailing '\0'")
-    }
-
-    let err = unlink_c(c("/\0")).expect_err("unlink /").kind();
-    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink /");
-    let err = unlink_c(c("noslash\0")).expect_err("unlink noslash").kind();
+fn cstr_no_slash() {
+    let noslash = cstr("noslash\0");
+    let err = unlink_c(noslash).expect_err("unlink noslash").kind();
     assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink noslash");
-    let err = OpenOptions::readonly().create().open_c(c("noslash\0")).expect_err("create noslash");
-    assert_eq!(err.kind(), ErrorKind::InvalidInput, "create noslash");
-    let err = OpenOptions::readonly().create().open_c(c("/\0")).expect_err("create /").kind();
-    assert!(err == ErrorKind::NotFound  ||  err == ErrorKind::InvalidInput, "create /");
+    let err = OpenOptions::readonly().create().open_c(noslash).expect_err("create noslash").kind();
+    assert_eq!(err, ErrorKind::InvalidInput, "create noslash");
 }
 
 #[test]
