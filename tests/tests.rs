@@ -82,23 +82,10 @@ fn change_nonblocking() {
 }
 
 #[test]
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 fn is_cloexec() {
     let mq = PosixMq::create("/is_cloexec").unwrap();
     let _ = posixmq::unlink("/is_cloexec");
     assert!(mq.is_cloexec());
-}
-
-#[test]
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
-fn is_not_cloexec() {
-    let mq = OpenOptions::writeonly()
-        .not_cloexec()
-        .create()
-        .open("/not_cloexec")
-        .unwrap();
-    let _ = posixmq::unlink("/not_cloexec");
-    assert!(!mq.is_cloexec());
 }
 
 #[test]

@@ -126,7 +126,7 @@
 //! `Sync` | Yes | Yes | Yes | Yes | Yes | Yes | Yes
 //! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | No | Yes
 //! `AsRawFd` | Yes | Yes | Yes | Yes | No | No | Yes
-//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
+//! `set_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
 //! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No | Cross-compiles
 //!
 //! This library will fail to compile if the target OS doesn't support posix
@@ -140,8 +140,10 @@
 //!   disabled when known not to work.
 //! * `AsRawFd`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
 //!   [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
-//!   which lets one get a file descriptor for a `mqd_t`. This is required for
-//!   querying or changing cloexec, and also for reliably setting it.
+//!   which lets one get a file descriptor from a `mqd_t`.
+//! * `set_cloexec()`: Disabling close-on-exec requires `AsRawFd`.
+//!   `is_cloexec()` is always available and just returns `true` on OSes where
+//!   the behavior cannot be changed.
 //! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
 //!   This does not guarantee that the polling mechanism used by mio supports
 //!   posix message queues though.
@@ -160,7 +162,10 @@
 //! On NetBSD, re-opening message queues multiple times can eventually make all
 //! further opens fail. This does not affect programs that open a single
 //! queue once.  
-//! The mio integration compiles, but registering message queues fail.
+//! The mio integration compiles, but registering message queues with mio fails.  
+//! Because NetBSD ignores cloexec when opening or cloning descriptors, there
+//! is a race condition with other threads exec'ing before cloexec is enabled
+//! for the descriptor.
 //!
 //! On Illumos and Solaris, the libc crate doesn't have the necessary functions
 //! or types at the moment so this library won't compile. Once a libc version
@@ -190,7 +195,6 @@
 //!
 //! * `send()` and `receive()` tries again when EINTR / `ErrorKind::Interrupted`
 //!   is returned. (Consistent with normal Rust io)
-//! * Descriptors are by default opened with O_CLOEXEC. (Consistent with normal Rust io)
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
 //!
@@ -244,8 +248,7 @@ use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{mq_attr, mq_getattr, mq_setattr};
 #[cfg(target_os="freebsd")]
 use libc::mq_getfd_np;
-use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
-use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
+use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NONBLOCK};
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
@@ -325,7 +328,6 @@ impl Debug for OpenOptions {
             .field("capacity", &self.capacity)
             .field("max_msg_len", &self.max_msg_len)
             .field("nonblocking", &((self.mode & O_NONBLOCK) != 0))
-            .field("cloexec", &((self.mode & O_CLOEXEC) != 0))
             .finish()
     }
 }
@@ -333,9 +335,7 @@ impl Debug for OpenOptions {
 impl OpenOptions {
     fn new(mode: c_int) -> Self {
         OpenOptions {
-            // std sets cloexec unconditionally as a security feature
-            // root issue: https://github.com/rust-lang/rust/issues/12148
-            mode: O_CLOEXEC | mode,
+            mode,
             // default permissions to only accessible for owner
             permissions: 0o700,
             capacity: 0,
@@ -423,12 +423,6 @@ impl OpenOptions {
         return self;
     }
 
-    /// Keep the message queue open after `exec`ing into another program.
-    pub fn not_cloexec(&mut self) -> &mut Self {
-        self.mode &= !O_CLOEXEC;
-        return self;
-    }
-
     /// Open a queue with the specified options.
     ///
     /// If the name doesn't start with a '/', one will be prepended.
@@ -490,15 +484,14 @@ impl OpenOptions {
         if mqd == -1isize as mqd_t {
             return Err(io::Error::last_os_error());
         }
-
         let mq = PosixMq{mqd};
 
-        // close-on-exec is enabled even without O_CLOEXEC on both Linux and FreeBSD
-        // TODO optimize by storing platform behaviour in a global atomic variable
-        // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
-        // and if open() created a queue, the caller must be able to differentiate.
-        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-        let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
+        // NetBSD and DragonFlyBSD doesn't set cloexec by default and
+        // ignores O_CLOEXEC. Setting it with FD_CLOEXEC works though.
+        // Propagate error if setting cloexec somehow fails, even though
+        // close-on-exec won't matter in most cases.
+        #[cfg(any(target_os="netbsd", target_os="dragonfly"))]
+        unsafe { mq.set_cloexec(true) }?;
 
         Ok(mq)
     }
@@ -721,41 +714,51 @@ impl PosixMq {
     /// This function is not available on FreeBSD, Illumos or Solaris.
     #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
     pub fn try_clone(&self) -> Result<Self, io::Error> {
-        match unsafe { fcntl(self.mqd, F_DUPFD_CLOEXEC, 0) } {
-            -1 => Err(io::Error::last_os_error()),
-            fd => Ok(PosixMq{mqd: fd})
-        }
+        let mq = match unsafe { fcntl(self.mqd, F_DUPFD_CLOEXEC, 0) } {
+            -1 => return Err(io::Error::last_os_error()),
+            fd => PosixMq{mqd: fd},
+        };
+        // NetBSD (but not DragonFlyBSD) ignores the cloexec part of F_DUPFD_CLOEXEC
+        #[cfg(target_os="netbsd")]
+        unsafe { mq.set_cloexec(true) }?;
+        Ok(mq)
     }
 
 
     /// Check whether this descriptor will be closed if the process `exec`s
     /// into another program.
     ///
+    /// Posix message queues are closed on exec by default, but this can be
+    /// changed with `set_cloexec()`. On operating systems where that function
+    /// is not available, this function unconditionally returns `true`.
+    ///
     /// # Errors
     ///
-    /// Retrieving this flag should only fail if the queue is already closed.
-    /// In that case `true` is returned because the queue will not be open
-    /// after `exec`ing.
-    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
+    /// Retrieving this flag should only fail if the message queue descriptor
+    /// is already closed. In that case `true` is returned as it will
+    /// not be open after `exec`ing either.
     pub fn is_cloexec(&self) -> bool {
-        let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
-        if flags == -1 {
-            true
-        } else {
-            (flags & FD_CLOEXEC) != 0
+        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
+        {
+            let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
+            if flags != -1 {
+                return (flags & FD_CLOEXEC) != 0;
+            }
         }
+        return true;
     }
 
-    /// Set close-on-exec for this descriptor.
+    /// Change close-on-exec for this descriptor.
     ///
-    /// `PosixMq` enables close-on-exec by default when opening message queues,
-    /// but this can be disabled with `OpenOptions::not_cloexec()`.
-    /// Prefer using `OpenOptions` to set it, because another thread might
-    /// `exec` between the message queue being opened and this change taking
-    /// effect.
+    /// It is on by default, so this method should only be called when one
+    /// wants the descriptor to remain open afte `exec`ing.
     ///
-    /// Additionally, this function has a race condition with itself, as the
-    /// flag cannot portably be set atomically without affecting other attributes.
+    /// This function is not available on Illumos or Solaris.
+    ///
+    /// # Safety
+    ///
+    /// This function has a race condition with itself, as the flag
+    /// cannot portably be set atomically without affecting other attributes.
     ///
     /// # Errors
     ///
