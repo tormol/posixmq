@@ -119,15 +119,15 @@
 //!
 //! ## Compatible operating systems and features
 //!
-//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Fuchsia
-//! -|-|-|-|-|-|-|-
-//! core features | Yes | Yes | buggy | Yes | No | Yes
-//! mio `Evented` | Yes | Yes | useless | Yes | No | No
-//! `Sync` | Yes | Yes | Yes | Yes | No | Yes
-//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | Yes
-//! `AsRawFd` | Yes | Yes | Yes | Yes | No | Yes
-//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | Yes | No | Yes
-//! Tested? | Yes, CI | Yes, CI | Manually | Manually | No | Cross-compiles
+//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris | Fuchsia
+//! -|-|-|-|-|-|-|-|-
+//! core features | Yes | Yes | buggy | Yes | coming | coming | Yes
+//! mio `Evented` | Yes | Yes | useless | Yes | No | No | No
+//! `Sync` | Yes | Yes | Yes | Yes | Yes | Yes | Yes
+//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | No | Yes
+//! `AsRawFd` | Yes | Yes | Yes | Yes | No | No | Yes
+//! (`is`\|`set`)`_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
+//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No | Cross-compiles
 //!
 //! This library will fail to compile if the target OS doesn't support posix
 //! message queues at all.
@@ -137,13 +137,7 @@
 //! * `FromRawFd+IntoRawFd`: For this to compile, the inner `mqd_t` type must
 //!   an `int` typedef, and bad things might happen if it doesn't represent a
 //!   file descriptor. These impls are currently on by default and only
-//!   disabled on operating systems `mqd_t` is known not to be an `int`.
-//! * `Sync`: I don't feel certain that the spec requires implementations to
-//!   be completely thread-safe, and the trait is therefore not blanket-
-//!   implemented. On operating systems where `mqd_t` is an `int` I assume it
-//!   represents a file descriptor and is passed directly to the kernel. On
-//!   FreeBSD `mqd_t` is a pointer to a struct, but the functions called by
-//!   this library only reads the contained file descriptor.
+//!   disabled when known not to work.
 //! * `AsRawFd`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
 //!   [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
 //!   which lets one get a file descriptor for a `mqd_t`. This is required for
@@ -163,24 +157,21 @@
 //! Versions before 11 do not have the function used to get a file descriptor,
 //! so this library will not compile there.
 //!
-//! While Illumos / Solaris [support posix message queues](https://github.com/illumos/illumos-gate/blob/master/usr/src/head/mqueue.h),
-//! this libray won't work there because the libc crate [doesn't have bindings](https://github.com/rust-lang/libc/search?q=mq_open&unscoped_q=mq_open).
-//!
 //! ## OS-dependent restrictions and default values
 //!
 //! Not even limiting oneself to the core features is enough to guarantee
 //! portability!
 //!
-//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFlyBSD
-//! -|-|-|-|-
-//! max priority | 32767 | 63 | **31** | 31
-//! default capacity | 10 | 10 | 32 | 32
-//! default max_msg_len | 8192 | 1024 | 992 | 992
-//! max capacity | **10**\* | 100 | 512 | 512
-//! max max_msg_len | **8192**\* | 16384 | 16384 | 16384
-//! allows empty messages | Yes | Yes | **No** | **No**
-//! enforces name rules | Yes | Yes | *No* | *No*
-//! allows "/." and "/.." | No | No | *Yes* | *Yes*
+//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFlyBSD | Illumos
+//! -|-|-|-|-|-
+//! max priority | 32767 | 63 | **31** | 31 | 31
+//! default capacity | 10 | 10 | 32 | 32 | 128
+//! default max_msg_len | 8192 | 1024 | 992 | 992 | 1024
+//! max capacity | **10**\* | 100 | 512 | 512 | No limit
+//! max max_msg_len | **8192**\* | 16384 | 16384 | 16384 | No limit
+//! allows empty messages | Yes | Yes | No | No | Yes
+//! enforces name rules | Yes | Yes | No | No | Yes
+//! allows "/.", "/.." and "/" | No | No | Yes | Yes | Yes
 //!
 //! On Linux the listed size limits only apply to unprivileged processes.
 //! As root there instead appears to be a combined limit on memory usage of the
@@ -223,8 +214,9 @@ use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(not(target_os="freebsd"))]
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
@@ -235,6 +227,7 @@ use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{mq_attr, mq_getattr, mq_setattr};
 use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
 #[cfg(target_os="freebsd")]
 use libc::mq_getfd_np;
@@ -554,6 +547,7 @@ impl PosixMq {
         // TODO optimize by storing platform behaviour in a global atomic variable
         // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
         // and if open() created a queue, the caller must be able to differentiate.
+        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
         let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
 
         // TODO check if O_NONBLOCK was actually set (NetBSD ignores it)
@@ -698,6 +692,7 @@ impl PosixMq {
     /// Retrieving this flag should only fail if the queue is already closed.
     /// In that case `true` is returned because the queue will not be open
     /// after `exec`ing.
+    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     pub fn is_cloexec(&self) -> bool {
         let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
         if flags == -1 {
@@ -723,9 +718,10 @@ impl PosixMq {
     /// This function should only fail if the underlying file descriptor has
     /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
     /// and not reused for something else yet.
+    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     pub unsafe fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
         // Race-prone but portable; Linux and the BSDs have fcntl(, F_IOCLEX)
-        // but fuchsia and solarish doesn't.
+        // but Fuchsia doesn't. (Neither does solarish, but that's moot.)
         // https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/fd.rs#L173
         let prev = fcntl(self.as_raw_fd(), F_GETFD);
         if prev == -1 {
@@ -752,10 +748,13 @@ impl PosixMq {
 ///
 /// Note that the queue will be closed when the returned `PosixMq` goes out
 /// of scope / is dropped.
+///
+/// This impl is not available on Illumos and Solaris.
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 impl AsRawFd for PosixMq {
     // On Linux, NetBSD and DragonFlyBSD, `mqd_t` is a plain file descriptor
     // and can trivially be convverted, but this is not guaranteed, nor the
-    // case on FreeBSD.
+    // case on FreeBSD, Illumos and Solaris.
     #[cfg(not(target_os="freebsd"))]
     fn as_raw_fd(&self) -> RawFd {
         self.mqd as RawFd
@@ -770,17 +769,22 @@ impl AsRawFd for PosixMq {
 
 /// Create a `PosixMq` handle from a raw file descriptor.
 ///
-/// Note that the queue will be closed when the returned `PosixMq` goes out
-/// of scope / is dropped.
-#[cfg(not(target_os="freebsd"))]
+/// Note that the message queue will be closed when the returned `PosixMq` goes
+/// out of scope / is dropped.
+///
+/// This impl is not available on FreeBSD, Illumos or Solaris.
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         PosixMq { mqd: fd as mqd_t }
     }
 }
 
-/// Convert the `PosixMq` into a raw file descriptor.
-#[cfg(not(target_os="freebsd"))]
+/// Convert the `PosixMq` into a raw file descriptor without closing the
+/// message queue.
+///
+/// This impl is not available on FreeBSD, Illumos or Solaris.
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
         let fd = self.mqd;
@@ -824,9 +828,14 @@ unsafe impl Send for PosixMq {}
 // but the sigevent is only accessed by `mq_notify()`, so it's thread-safe
 // as long as that function requires `&mut self` or isn't exposed.
 //  src: https://svnweb.freebsd.org/base/head/lib/librt/mq.c?view=markup
+// On Illumos, mqd_t points to a rather complex struct, but the functions use
+// mutexes and semaphores, so I assume they're totally thread-safe.
+//  src: https://github.com/illumos/illumos-gate/blob/master/usr/src/lib/libc/port/rt/mqueue.c
+// Solaris I assume is equivalent to Illumos, because the Illumos code has
+// barely been modified after the initial source code release.
 // Linux, NetBSD, DragonFlyBSD and Fuchsia gets Sync auto-implemented because
 // mqd_t is an int.
-#[cfg(target_os="freebsd")]
+#[cfg(any(target_os="freebsd", target_os="illumos", target_os="solaris"))]
 unsafe impl Sync for PosixMq {}
 
 

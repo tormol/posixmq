@@ -82,6 +82,7 @@ fn change_nonblocking() {
 }
 
 #[test]
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 fn is_cloexec() {
     let mq = PosixMq::create("/is_cloexec").unwrap();
     let _ = posixmq::unlink("/is_cloexec");
@@ -89,6 +90,7 @@ fn is_cloexec() {
 }
 
 #[test]
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 fn is_not_cloexec() {
     let mq = OpenOptions::writeonly()
         .not_cloexec()
@@ -100,6 +102,7 @@ fn is_not_cloexec() {
 }
 
 #[test]
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 fn change_cloexec() {
     let mq = PosixMq::create("/change_cloexec").unwrap();
     let _ = posixmq::unlink("/change_cloexec");
@@ -209,6 +212,7 @@ fn name_from_bytes_interior_nul() {
     name_from_bytes("/good\0shit\0");
 }
 
+#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 #[test]
 fn drop_closes() {
     use std::os::unix::io::AsRawFd;
@@ -226,7 +230,7 @@ fn drop_closes() {
     assert_eq!(mq_fd, with_fd.as_raw_fd());
 }
 
-#[cfg(not(target_os="freebsd"))]
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 #[test]
 fn into_fd_doesnt_drop() {
     use std::os::unix::io::{FromRawFd, IntoRawFd};
