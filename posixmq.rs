@@ -121,8 +121,8 @@
 //!
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris | Fuchsia
 //! -|-|-|-|-|-|-|-|-
-//! core features | Yes | Yes | buggy | Yes | coming | coming | Yes
-//! mio `Evented` | Yes | Yes | useless | Yes | No | No | No
+//! core features | Yes | Yes | Yes | Yes | coming | coming | Yes
+//! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
 //! `Sync` | Yes | Yes | Yes | Yes | Yes | Yes | Yes
 //! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | No | Yes
 //! `AsRawFd` | Yes | Yes | Yes | Yes | No | No | Yes
@@ -157,6 +157,15 @@
 //! Versions before 11 do not have the function used to get a file descriptor,
 //! so this library will not compile there.
 //!
+//! On NetBSD, re-opening message queues multiple times can eventually make all
+//! further opens fail. This does not affect programs that open a single
+//! queue once.  
+//! The mio integration compiles, but registering message queues fail.
+//!
+//! On Illumos and Solaris, the libc crate doesn't have the necessary functions
+//! or types at the moment so this library won't compile. Once a libc version
+//! with those is released, the core features will become useable.
+//!
 //! ## OS-dependent restrictions and default values
 //!
 //! Not even limiting oneself to the core features is enough to guarantee
@@ -184,6 +193,15 @@
 //! * Descriptors are by default opened with O_CLOEXEC. (Consistent with normal Rust io)
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
+//!
+//! # Minimum Rust version
+//!
+//! The minimum supported Rust version is 1.31.  
+//! While the crate might currently compile on older versions, a minor release
+//! can break this.
+//! Until rustup has builds for DragonFlyBSD and Illumos, this crate will never
+//! require a newer Rust version than what is available in the DragonFlyBSD or
+//! Joyent repositories.
 //!
 //! # Missing and planned features
 //!

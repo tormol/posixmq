@@ -17,11 +17,9 @@ loop {
 
 Not all operating systems have posix message queues: Linux and most BSDs have them, but macOS, OpenBSD and Windows doesn't. See the crate documentation for details.
 
-This library is **tested to work on Linux and FreeBSD, but **has issues on NetBSD**.
-
 ## mio integration
 
-On Linux and FreeBSD posix message queues can be polled, and therefore used with [mio](https://github.com/carllerche/mio). This feature is not enabled by default; enable it in Cargo.toml with:
+On Linux, FreeBSD and DragonFlyBSD posix message queues can be polled, and therefore used with [mio](https://github.com/carllerche/mio). This feature is not enabled by default; enable it in Cargo.toml with:
 
 ```toml
 [dependencies]
@@ -35,6 +33,12 @@ Also remember to open the message queues in nonblocking mode.
 * `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, which avoids unnecessary allocations.
 * Optionally integrates with `mio` so the message queues can be polled.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
+
+## Minimum Rust version
+
+The minimum supported Rust version is 1.31.  
+While the crate might currently compile on older versions, a minor release can break this.
+Until rustup has builds for DragonFlyBSD and Illumos, this crate will never require a newer Rust version than what is available in the DragonFlyBSD or Joyent repositories.
 
 ## License
 
