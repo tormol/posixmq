@@ -220,26 +220,22 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 extern crate libc;
-use libc::{c_int, c_uint, c_char, mode_t};
+use libc::{c_int, c_uint, c_char};
 #[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
 use libc::c_long;
 use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
 use libc::{mq_attr, mq_getattr, mq_setattr};
-use libc::{O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
+#[cfg(target_os="freebsd")]
+use libc::mq_getfd_np;
+use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
-#[cfg(target_os="freebsd")]
-use libc::mq_getfd_np;
 
 #[cfg(feature="mio")]
 extern crate mio;
 #[cfg(feature="mio")]
-use mio::event::Evented;
-#[cfg(feature="mio")]
-use mio::unix::EventedFd;
-#[cfg(feature="mio")]
-use mio::{Ready, Poll, PollOpt, Token};
+use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};
 
 
 /// Helper function for converting a `str` or byte slice into a C string
@@ -456,7 +452,36 @@ impl OpenOptions {
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
     /// * Possibly other
     pub fn open_c(&self,  name: &CStr) -> Result<PosixMq, io::Error> {
-        PosixMq::new_c(name, self)
+        let opts = self;
+
+        // because mq_open is a vararg function, mode_t cannot be passed
+        // directly on FreeBSD where it's smaller than c_int.
+        let permissions = opts.permissions as c_int;
+
+        let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
+        let mut capacities_ptr = ptr::null_mut::<mq_attr>();
+        if opts.capacity != 0 || opts.max_msg_len != 0 {
+            capacities.mq_maxmsg = opts.capacity as AttrField;
+            capacities.mq_msgsize = opts.max_msg_len as AttrField;
+            capacities_ptr = &mut capacities as *mut mq_attr;
+        }
+
+        let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, permissions, capacities_ptr) };
+        // even when mqd_t is a pointer, -1 is the return value for error
+        if mqd == -1isize as mqd_t {
+            return Err(io::Error::last_os_error());
+        }
+
+        let mq = PosixMq{mqd};
+
+        // close-on-exec is enabled even without O_CLOEXEC on both Linux and FreeBSD
+        // TODO optimize by storing platform behaviour in a global atomic variable
+        // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
+        // and if open() created a queue, the caller must be able to differentiate.
+        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
+        let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
+
+        Ok(mq)
     }
 }
 
@@ -511,6 +536,24 @@ type AttrField = i64;
 #[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
 type AttrField = c_long;
 
+/// Contains information about the capacities and state of a posix message queue.
+///
+/// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
+#[derive(Clone,Copy, PartialEq,Eq, Debug)]
+pub struct Attributes {
+    /// The maximum size of messages that can be stored in the queue.
+    pub max_msg_len: usize,
+    /// The maximum number of messages in the queue.
+    pub capacity: usize,
+    /// The number of messages currently in the queue at the time the
+    /// attributes were retrieved.
+    pub current_messages: usize,
+    /// Whether the descriptor was set to nonblocking mode when
+    /// the attributes were retrieved.
+    pub nonblocking: bool,
+}
+
+
 /// A descriptor for an open posix message queue.
 ///
 /// Message queues can sent to and / or received from depending on the options
@@ -522,38 +565,6 @@ pub struct PosixMq {
 }
 
 impl PosixMq {
-    fn new_c(name: &CStr,  opts: &OpenOptions) -> Result<Self, io::Error> {
-        // because mq_open is a vararg function, mode_t cannot be passed
-        // directly on FreeBSD where it's smaller than c_int.
-        let permissions = opts.permissions as c_int;
-
-        let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
-        let mut capacities_ptr = ptr::null_mut::<mq_attr>();
-        if opts.capacity != 0 || opts.max_msg_len != 0 {
-            capacities.mq_maxmsg = opts.capacity as AttrField;
-            capacities.mq_msgsize = opts.max_msg_len as AttrField;
-            capacities_ptr = &mut capacities as *mut mq_attr;
-        }
-
-        let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, permissions, capacities_ptr) };
-        // even when mqd_t is a pointer, -1 is the return value for error
-        if mqd == -1isize as mqd_t {
-            return Err(io::Error::last_os_error());
-        }
-
-        let mq = PosixMq{mqd};
-
-        // close-on-exec is enabled even without O_CLOEXEC on both Linux and FreeBSD
-        // TODO optimize by storing platform behaviour in a global atomic variable
-        // Ignore errors; It is unlikely to fail, in most cases it doesn't matter,
-        // and if open() created a queue, the caller must be able to differentiate.
-        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-        let _ = unsafe { mq.set_cloexec(opts.mode & O_CLOEXEC != 0) };
-
-        // TODO check if O_NONBLOCK was actually set (NetBSD ignores it)
-        Ok(mq)
-    }
-
     /// Open an existing message queue in read-only mode.
     ///
     /// See [`OpenOptions::open()`](struct.OpenOptions.html#method.open) for
@@ -864,22 +875,4 @@ impl Evented for PosixMq {
     fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
         EventedFd(&self.as_raw_fd()).deregister(poll)
     }
-}
-
-
-/// Contains information about the capacities and state of a posix message queue.
-///
-/// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
-#[derive(Clone,Copy, PartialEq,Eq, Debug)]
-pub struct Attributes {
-    /// The maximum size of messages that can be stored in the queue.
-    pub max_msg_len: usize,
-    /// The maximum number of messages in the queue.
-    pub capacity: usize,
-    /// The number of messages currently in the queue at the time the
-    /// attributes were retrieved.
-    pub current_messages: usize,
-    /// Whether the descriptor was set to nonblocking mode when
-    /// the attributes were retrieved.
-    pub nonblocking: bool,
 }
