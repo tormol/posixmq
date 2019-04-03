@@ -253,14 +253,24 @@ fn drop_closes() {
 fn into_fd_doesnt_drop() {
     use std::os::unix::io::{FromRawFd, IntoRawFd};
 
+    let mq = PosixMq::create("/via_fd").unwrap();
+    let _ = unlink("/via_fd");
     unsafe {
-        let mq = PosixMq::create("/via_fd").unwrap();
-        let _ = unlink("/via_fd");
-
         mq.send(0, b"foo").unwrap();
         let fd = mq.into_raw_fd();
         let mq = PosixMq::from_raw_fd(fd);
         assert_eq!(mq.receive(&mut[0; 8192]).unwrap(), (0, 3));
+    }
+}
+
+#[test]
+fn int_mqd_doesnt_drop() {
+    let mq = PosixMq::create("/raw_mqd").unwrap();
+    let _ = unlink("/raw_mqd");
+    unsafe {
+        let mqd = mq.into_raw_mqd();
+        let mq = PosixMq::from_raw_mqd(mqd);
+        mq.send(0, b"lorem ipsum").expect("descriptor should remain open");
     }
 }
 

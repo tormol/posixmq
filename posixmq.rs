@@ -768,12 +768,55 @@ impl PosixMq {
         }
         Ok(())
     }
+
+
+    /// Create a `PosixMq` from an already opened message queue descriptor.
+    ///
+    /// This function should only be used for ffi or if calling `mq_open()`
+    /// directly for some reason.  
+    /// Use [`from_raw_fd()`](#method.from_raw_fd) instead if the surrounding
+    /// code requires `mqd_t` to be a file descriptor.
+    ///
+    /// # Safety
+    ///
+    /// On some operating systems `mqd_t` is a pointer, so the safety of most
+    /// other methods then depend on it being correct.
+    pub unsafe fn from_raw_mqd(mqd: mqd_t) -> Self {
+        PosixMq{mqd}
+    }
+
+    /// Get the raw message queue descriptor.
+    ///
+    /// This function should only be used for passing to ffi code or to access
+    /// portable features not exposed by this wrapper (such as calling
+    /// `mq_notify()` or handling EINTR / `ErrorKind::Interrupted` when sending
+    /// or receiving).
+    ///
+    /// If you need a file descriptor, use `as_raw_fd()` instead for increased
+    /// portability.
+    /// ([`as_raw_fd()`](#method.as_raw_fd) can sometimes retrieve an
+    /// underlying file descriptor even if `mqd_t` is not an `int`.)
+    pub fn as_raw_mqd(&self) -> mqd_t {
+        self.mqd
+    }
+
+    /// Convert this wrapper into the raw message queue descriptor without
+    /// closing it.
+    ///
+    /// This function should only be used for ffi; If you need a file
+    /// descriptor use [`into_raw_fd()`](#method.into_raw_fd) instead.
+    pub fn into_raw_mqd(self) -> mqd_t {
+        let mqd = self.mqd;
+        mem::forget(self);
+        return mqd;
+    }
 }
 
-/// Get the raw file descriptor for the queue.
+/// Get an underlying file descriptor for the message queue.
 ///
-/// Note that the queue will be closed when the returned `PosixMq` goes out
-/// of scope / is dropped.
+/// If you just need the raw `mqd_t`, use
+/// [`as_raw_mqd()`](struct.PosixMq.html#tymethod.as_raw_mqd)
+/// instead for increased portability.
 ///
 /// This impl is not available on Illumos and Solaris.
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
@@ -793,12 +836,15 @@ impl AsRawFd for PosixMq {
     }
 }
 
-/// Create a `PosixMq` handle from a raw file descriptor.
+/// Create a `PosixMq` wrapper from a raw file descriptor.
 ///
 /// Note that the message queue will be closed when the returned `PosixMq` goes
 /// out of scope / is dropped.
 ///
-/// This impl is not available on FreeBSD, Illumos or Solaris.
+/// This impl is not available on FreeBSD, Illumos or Solaris; If you got a
+/// `mqd_t` in a portable fashion (from FFI code or by calling `mq_open()`
+/// yourself for some reason), use
+/// [`from_raw_mqd()`](struct.PosixMq.html#tymethod.from_raw_mqd) instead.
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -809,7 +855,9 @@ impl FromRawFd for PosixMq {
 /// Convert the `PosixMq` into a raw file descriptor without closing the
 /// message queue.
 ///
-/// This impl is not available on FreeBSD, Illumos or Solaris.
+/// This impl is not available on FreeBSD, Illumos or Solaris. If you need to
+/// transfer ownership to FFI code accepting a `mqd_t`, use
+/// [`into_raw_mqd()`](struct.PosixMq.html#tymethod.into_raw_mqd) instead.
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
@@ -818,6 +866,7 @@ impl IntoRawFd for PosixMq {
         return fd;
     }
 }
+
 
 impl Debug for PosixMq {
     // Only show "fd" on operating systems where mqd_t is known to contain one.
