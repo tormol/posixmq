@@ -188,7 +188,6 @@
 //! # Missing and planned features
 //!
 //! * `mq_timedsend()` and `mq_timedreceive()` wrappers.
-//! * `try_clone()`
 //! * `Iterator`-implementing struct that calls `receive()`
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
@@ -231,6 +230,8 @@ use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR};
 use libc::{O_CREAT, O_EXCL, O_NONBLOCK, O_CLOEXEC};
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
 use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+use libc::F_DUPFD_CLOEXEC;
 
 #[cfg(feature="mio")]
 extern crate mio;
@@ -692,6 +693,20 @@ impl PosixMq {
             return Err(io::Error::last_os_error());
         }
         Ok(())
+    }
+
+
+    /// Create a new descriptor for the same message queue.
+    ///
+    /// The new descriptor will have close-on-exec set.
+    ///
+    /// This function is not available on FreeBSD, Illumos or Solaris.
+    #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+    pub fn try_clone(&self) -> Result<Self, io::Error> {
+        match unsafe { fcntl(self.mqd, F_DUPFD_CLOEXEC, 0) } {
+            -1 => Err(io::Error::last_os_error()),
+            fd => Ok(PosixMq{mqd: fd})
+        }
     }
 
 

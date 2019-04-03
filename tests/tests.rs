@@ -114,6 +114,24 @@ fn change_cloexec() {
 
 
 #[test]
+#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+fn try_clone() {
+    use std::os::unix::io::AsRawFd;
+
+    let a = PosixMq::create("/clone_fd").unwrap();
+    let _ = posixmq::unlink("/clone_fd");
+    let b = a.try_clone().unwrap();
+    assert!(a.as_raw_fd() != b.as_raw_fd());
+    assert!(b.is_cloexec());
+    a.send(0, b"a").expect("original descriptor should not be closed");
+    b.send(1, b"b").expect("cloned descriptor is should be usable");
+    assert_eq!(a.attributes().current_messages, 2, "descriptors should point to the same queue");
+    drop(a);
+    b.send(2, b"c").expect("cloned descriptor should work after closing the original");
+}
+
+
+#[test]
 fn send_errors() {
     let _ = unlink("send");
     let nb = OpenOptions::writeonly()
