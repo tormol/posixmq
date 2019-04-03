@@ -230,22 +230,19 @@ fn name_from_bytes_interior_nul() {
     name_from_bytes("/good\0shit\0");
 }
 
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
 #[test]
+#[ignore] // racy
 fn drop_closes() {
-    use std::os::unix::io::AsRawFd;
-
-    // brittle!
     let mq = PosixMq::create("/close").unwrap();
     let _ = unlink("/close");
-
-    let mq_fd = mq.as_raw_fd();
+    let mqd = mq.as_raw_mqd();
+    let fake_clone = unsafe { PosixMq::from_raw_mqd(mqd) };
+    // cast to usize because pointers cannot be compared directly
+    assert_eq!(fake_clone.as_raw_mqd() as usize, mqd as usize);
+    fake_clone.send(0, b"b").expect("as_raw_mqd() should not close");
     drop(mq);
-    // Would ideally have created something completely unnamed,
-    // but this should also be unobtrusive.
-    let with_fd = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("cannot listen on any port on loopback");
-    assert_eq!(mq_fd, with_fd.as_raw_fd());
+    fake_clone.send(0, b"b").expect_err("Drop should have closed the descriptor");
+    // also tests that drop ignores errors
 }
 
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
