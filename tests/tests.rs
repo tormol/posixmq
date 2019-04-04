@@ -147,7 +147,7 @@ fn send_errors() {
     assert_eq!(bl.send(!0, b"f").unwrap_err().kind(), ErrorKind::InvalidInput);
 
     nb.send(9, b"a").expect("nonblocking send \"a\"");
-    if cfg!(target_os="netbsd") {// NetBSD doesn't allow empty messages
+    if cfg!(target_os="netbsd") || cfg!(target_os="dragonfly") {// doesn't allow empty messages
         bl.send(0, b"b").expect("blocking send \"b\"");
     } else {
         bl.send(0, b"").expect("blocking send empty");

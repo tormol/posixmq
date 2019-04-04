@@ -872,7 +872,7 @@ impl Debug for PosixMq {
     // Only show "fd" on operating systems where mqd_t is known to contain one.
     #[cfg(any(
         target_os="linux", target_os="freebsd",
-        target_os="netbsd", target_os="dragonflybsd",
+        target_os="netbsd", target_os="dragonfly",
     ))]
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
         write!(fmtr, "PosixMq{{ fd: {} }}", self.as_raw_fd())
@@ -880,7 +880,7 @@ impl Debug for PosixMq {
 
     #[cfg(not(any(
         target_os="linux", target_os="freebsd",
-        target_os="netbsd", target_os="dragonflybsd",
+        target_os="netbsd", target_os="dragonfly",
     )))]
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
         write!(fmtr, "PosixMq{{}}")

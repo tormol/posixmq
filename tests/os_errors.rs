@@ -14,7 +14,7 @@ fn name_too_long() {
     assert_eq!(PosixMq::create(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
 }
 
-#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonfly")))] // allown any name
 #[test]
 fn unlink_invalid_names() {
     assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind(), "\"\"");
@@ -53,7 +53,7 @@ fn just_slash() {
     );
 }
 
-#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonfly")))] // allown any name
 #[test]
 fn open_invalid_names() {
     let err = PosixMq::create("//").expect_err("create //").kind();
@@ -65,7 +65,7 @@ fn open_invalid_names() {
 }
 
 #[cfg(not(any(
-    target_os="netbsd", target_os="dragonflybsd", // allows any name
+    target_os="netbsd", target_os="dragonfly", // allows any name
     target_os="illumos", target_os="solaris", // allows these
     target_os="freebsd" // can cause kernel panic
 )))]
@@ -84,7 +84,7 @@ fn reserved_names() {
 
 #[test]
 fn cstr_empty_name() {
-    let error = if cfg!(target_os="netbsd") || cfg!(target_os="dragonflybsd") {
+    let error = if cfg!(target_os="netbsd") || cfg!(target_os="dragonfly") {
         ErrorKind::NotFound
     } else {
         ErrorKind::InvalidInput
@@ -98,7 +98,7 @@ fn cstr_empty_name() {
     );
 }
 
-#[cfg(not(any(target_os="netbsd", target_os="dragonflybsd")))] // allown any name
+#[cfg(not(any(target_os="netbsd", target_os="dragonfly")))] // allown any name
 #[test]
 fn cstr_no_slash() {
     let noslash = cstr("noslash\0");
