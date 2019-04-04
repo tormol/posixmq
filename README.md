@@ -31,6 +31,7 @@ Also remember to open the message queues in nonblocking mode.
 ## Differences from [posix_mq](https://github.com/aprilabank/posix_mq.rs)
 
 * `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, which avoids unnecessary allocations.
+* Supports deadlines / timeouts.
 * Optionally integrates with `mio` so the message queues can be polled.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
 

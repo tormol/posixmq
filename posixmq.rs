@@ -208,7 +208,6 @@
 //!
 //! # Missing and planned features
 //!
-//! * `mq_timedsend()` and `mq_timedreceive()` wrappers.
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
 //! * tmpfile equivalent
@@ -226,7 +225,7 @@
 // so `std::io::Error::last_err()` is required to give errors
 // more specific than "something went wrong".
 // Depending on std also means that functions can use `io::Error` and
-// `time::Instant` instead of custom types.
+// `SystemTime` instead of custom types.
 
 use std::{io, mem, ptr};
 use std::borrow::Cow;
@@ -237,13 +236,15 @@ use std::fmt::{self, Debug, Formatter};
 use std::os::unix::io::{AsRawFd, RawFd};
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::time::{Duration, SystemTime};
 
 extern crate libc;
 use libc::{c_int, c_uint, c_char};
 #[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
 use libc::c_long;
-use libc::{mqd_t, mq_open, mq_send, mq_receive, mq_close, mq_unlink};
+use libc::{mqd_t, mq_open, mq_close, mq_unlink, mq_send, mq_receive};
 use libc::{mq_attr, mq_getattr, mq_setattr};
+use libc::{timespec, time_t, mq_timedsend, mq_timedreceive};
 #[cfg(target_os="freebsd")]
 use libc::mq_getfd_np;
 use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NONBLOCK};
@@ -576,6 +577,91 @@ pub struct Attributes {
 }
 
 
+macro_rules! retry_if_interrupted {($call:expr) => {{
+    loop {// catch EINTR and retry
+        let ret = $call;
+        if ret != -1 {
+            break ret;
+        }
+        let err = io::Error::last_os_error();
+        if err.kind() != ErrorKind::Interrupted {
+            return Err(err)
+        }
+    }
+}}}
+
+/// Returns saturated timespec as err if systemtime cannot be represented
+fn deadline_to_realtime(deadline: SystemTime) -> Result<timespec, timespec> {
+    /// Don't use struct literal in case timespec has extra fields on some platform.
+    fn new_timespec(secs: time_t,  nsecs: KernelLong) -> timespec {
+        let mut ts: timespec = unsafe { mem::zeroed() };
+        ts.tv_sec = secs;
+        ts.tv_nsec = nsecs;
+        return ts;
+    }
+
+    // mq_timedsend() and mq_timedreceive() takes an absolute point in time,
+    // based on CLOCK_REALTIME aka SystemTime.
+    match deadline.duration_since(SystemTime::UNIX_EPOCH) {
+        // Currently SystemTime has the same range as the C types, but
+        // avoid truncation in case this changes.
+        Ok(expires) if expires.as_secs() > time_t::max_value() as u64
+            => Err(new_timespec(time_t::max_value(), 0)),
+        Ok(expires)
+            => Ok(new_timespec(expires.as_secs() as time_t, expires.subsec_nanos() as KernelLong)),
+        // A pre-1970 deadline is probably a bug, but handle it anyway.
+        // Based on https://github.com/solemnwarning/timespec/blob/master/README.md
+        // the subsecond part of timespec should be positive and counts toward
+        // positive infinity; (-1, 0) < (-1, 999999999) < (0, 0). This has the
+        // advantage of simplifying addition and subtraction, but is the
+        // opposite of Duration which counts away from zero.
+        // The minimum representable value is therefore (-min_value(), 0)
+        Err(ref earlier) if earlier.duration() > Duration::new(time_t::max_value() as u64 + 1, 0)
+            => Err(new_timespec(time_t::min_value()+1, 0)), // add one to avoid negation bugs
+        Err(ref earlier) if earlier.duration().subsec_nanos() == 0
+            => Ok(new_timespec(-(earlier.duration().as_secs() as time_t), 0)),
+        Err(earlier) => {
+            // convert fractional part from counting away from zero to counting
+            // toward positive infinity
+            let before = earlier.duration();
+            let secs = -(before.as_secs() as time_t) - 1;
+            let nsecs = 1_000_000_000 - before.subsec_nanos() as KernelLong;
+            Ok(new_timespec(secs, nsecs))
+        }
+    }
+}
+
+/// Returns an error if timeout is not representable or the produced deadline
+/// overflows.
+fn timeout_to_realtime(timeout: Duration) -> Result<timespec, io::Error> {
+    if let Ok(now) = deadline_to_realtime(SystemTime::now()) {
+        let mut expires = now;
+        expires.tv_sec = expires.tv_sec.wrapping_add(timeout.as_secs() as time_t);
+        // nanosecond values only use 30 bits, so adding two together is safe
+        // even if tv_nsec is an i32
+        expires.tv_nsec += timeout.subsec_nanos() as KernelLong;
+        const NANO: KernelLong = 1_000_000_000;
+        expires.tv_sec = expires.tv_sec.wrapping_add(expires.tv_nsec / NANO);
+        expires.tv_nsec %= NANO;
+        // check that the unsigned timeout is representable as a signed and
+        // possibly smaller time_t, and the additions didn't overflow.
+        // The second check will fail to catch Duration::new(!0, 999_999_999)
+        // (which makes tv_sec wrap completely to the original value), but
+        // the unsigned max value is not representable as a signed value and
+        // will be caught by the first check.
+        // Using wrapping_add and catching overflow afterwards avoids repeating
+        // the error creation and also handles negative system time.
+        if timeout.as_secs() > time_t::max_value() as u64  ||  expires.tv_sec < now.tv_sec {
+            Err(io::Error::new(ErrorKind::InvalidInput, "timeout is too long"))
+        } else {
+            Ok(expires)
+        }
+    } else {
+        Err(io::Error::new(ErrorKind::Other, "system time is not representable"))
+    }
+}
+
+
 /// A descriptor for an open posix message queue.
 ///
 /// Message queues can sent to and / or received from depending on the options
@@ -618,17 +704,9 @@ impl PosixMq {
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
     pub fn send(&self,  priority: u32,  msg: &[u8]) -> Result<(), io::Error> {
-        let bptr = msg.as_ptr() as *const c_char;
-        loop {// catch EINTR and retry
-            let ret = unsafe { mq_send(self.mqd, bptr, msg.len(), priority as c_uint) };
-            if ret == 0 {
-                return Ok(());
-            }
-            let err = io::Error::last_os_error();
-            if err.kind() != ErrorKind::Interrupted {
-                return Err(err)
-            }
-        }
+        let mptr = msg.as_ptr() as *const c_char;
+        retry_if_interrupted!(unsafe { mq_send(self.mqd, mptr, msg.len(), priority as c_uint) });
+        Ok(())
     }
 
     /// Take the message with the highest priority from the queue.
@@ -644,18 +722,12 @@ impl PosixMq {
     pub fn receive(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
         let mut priority = 0 as c_uint;
-        loop {// catch EINTR and retry
-            let len = unsafe { mq_receive(self.mqd, bptr, msgbuf.len(), &mut priority) };
-            if len >= 0 {
-                // c_uint is unlikely to differ from u32, but even if it's bigger, the
-                // range of supported values will likely be far smaller.
-                return Ok((priority as u32, len as usize));
-            }
-            let err = io::Error::last_os_error();
-            if err.kind() != ErrorKind::Interrupted {
-                return Err(err)
-            }
-        }
+        let len = retry_if_interrupted!(
+            unsafe { mq_receive(self.mqd, bptr, msgbuf.len(), &mut priority) }
+        );
+        // c_uint is unlikely to differ from u32, but even if it's bigger, the
+        // range of supported values will likely be far smaller.
+        Ok((priority as u32, len as usize))
     }
 
     /// Returns an `Iterator` which calls `receive()` repeatedly with an
@@ -665,6 +737,120 @@ impl PosixMq {
     /// used to drain the queue. Otherwise it will block and never end.
     pub fn iter<'a>(&'a self) -> Iter<'a> {
         self.into_iter()
+    }
+
+
+    fn timedsend(&self,  priority: u32,  msg: &[u8],  deadline: &timespec)
+    -> Result<(), io::Error> {
+        let mptr = msg.as_ptr() as *const c_char;
+        retry_if_interrupted!(unsafe {
+            mq_timedsend(self.mqd, mptr, msg.len(), priority as c_uint, deadline)
+        });
+        Ok(())
+    }
+
+    /// Add a message to the queue or cancel if it's still full after a given
+    /// duration.
+    ///
+    /// Returns immediately if opened in nonblocking mode, and the timeout has
+    /// no effect.
+    ///
+    /// For maximum portability, avoid using priorities >= 32 or sending
+    /// zero-length messages.
+    ///
+    /// # Errors
+    ///
+    /// * Timeout expired (ETIMEDOUT) => `ErrorKind::TimedOut`
+    /// * Message is too big for the queue (EMSGSIZE) => `ErrorKind::Other`
+    /// * OS doesn't allow empty messages (EMSGSIZE) => `ErrorKind::Other`
+    /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
+    /// * Queue is full and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
+    /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
+    /// * Timeout is too long / not representable => `ErrorKind::InvalidInput`
+    /// * Possibly other => `ErrorKind::Other`
+    pub fn send_timeout(&self,  priority: u32,  msg: &[u8],  timeout: Duration)
+    -> Result<(), io::Error> {
+        timeout_to_realtime(timeout).and_then(|expires| self.timedsend(priority, msg, &expires) )
+    }
+
+    /// Add a message to the queue or cancel if the queue is still full at a
+    /// certain point in time.
+    ///
+    /// Returns immediately if opened in nonblocking mode, and the timeout has
+    /// no effect.  
+    /// The deadline is a `SystemTime` because the queues are intended for
+    /// inter-process commonication, and `Instant` might be process-specific.
+    ///
+    /// For maximum portability, avoid using priorities >= 32 or sending
+    /// zero-length messages.
+    ///
+    /// # Errors
+    ///
+    /// * Deadline reached (ETIMEDOUT) => `ErrorKind::TimedOut`
+    /// * Message is too big for the queue (EMSGSIZE) => `ErrorKind::Other`
+    /// * OS doesn't allow empty messages (EMSGSIZE) => `ErrorKind::Other`
+    /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
+    /// * Queue is full and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
+    /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
+    /// * Possibly other => `ErrorKind::Other`
+    pub fn send_deadline(&self,  priority: u32,  msg: &[u8],  deadline: SystemTime)
+    -> Result<(), io::Error> {
+        match deadline_to_realtime(deadline) {
+            Ok(expires) => self.timedsend(priority, msg, &expires),
+            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "deadline is not representable"))
+        }
+    }
+
+    fn timedreceive(&self,  msgbuf: &mut[u8],  deadline: &timespec)
+    -> Result<(u32, usize), io::Error> {
+        let bptr = msgbuf.as_mut_ptr() as *mut c_char;
+        let mut priority = 0 as c_uint;
+        let len = retry_if_interrupted!(
+            unsafe { mq_timedreceive(self.mqd, bptr, msgbuf.len(), &mut priority, deadline) }
+        );
+        Ok((priority as u32, len as usize))
+    }
+
+    /// Take the message with the highest priority from the queue or cancel if
+    /// the queue still empty after a given duration.
+    ///
+    /// Returns immediately if opened in nonblocking mode, and the timeout has
+    /// no effect.
+    ///
+    /// # Errors
+    ///
+    /// * Timeout expired (ETIMEDOUT) => `ErrorKind::TimedOut`
+    /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
+    /// * Queue is empty and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
+    /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
+    /// * Timeout is too long / not representable => `ErrorKind::InvalidInput`
+    /// * Possibly other => `ErrorKind::Other`
+    pub fn receive_timeout(&self,  msgbuf: &mut[u8],  timeout: Duration)
+    -> Result<(u32, usize), io::Error> {
+        timeout_to_realtime(timeout).and_then(|expires| self.timedreceive(msgbuf, &expires) )
+    }
+
+    /// Take the message with the highest priority from the queue or cancel if
+    /// the queue is still empty at a point in time.
+    ///
+    /// Returns immediately if opened in nonblocking mode, and the timeout has
+    /// no effect.  
+    /// The deadline is a `SystemTime` because the queues are intended for
+    /// inter-process commonication, and `Instant` might be process-specific.
+    ///
+    /// # Errors
+    ///
+    /// * Deadline reached (ETIMEDOUT) => `ErrorKind::TimedOut`
+    /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
+    /// * Queue is empty and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
+    /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
+    /// * Possibly other => `ErrorKind::Other`
+    pub fn receive_deadline(&self,  msgbuf: &mut[u8],  deadline: SystemTime)
+    -> Result<(u32, usize), io::Error> {
+        match deadline_to_realtime(deadline) {
+            Ok(expires) => self.timedreceive(msgbuf, &expires),
+            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "deadline is not representable"))
+        }
     }
 
 
