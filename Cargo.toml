@@ -8,6 +8,7 @@ license = "Apache-2.0 / MIT"
 authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["posix", "mq", "mqueue", "queue"]
 categories = ["os::unix-apis", "asynchronous"]
+exclude = ["/tests/**", "/examples/**"] # contains more than just tests and examples
 edition = "2018"
 
 [dependencies]
