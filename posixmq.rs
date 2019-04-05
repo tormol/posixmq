@@ -577,12 +577,12 @@ pub struct PosixMq {
 }
 
 impl PosixMq {
-    /// Open an existing message queue in read-only mode.
+    /// Open an existing message queue in read-write mode.
     ///
     /// See [`OpenOptions::open()`](struct.OpenOptions.html#method.open) for
     /// details and possible errors.
     pub fn open<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<Self, io::Error> {
-        OpenOptions::readonly().open(name)
+        OpenOptions::readwrite().open(name)
     }
 
     /// Open a message queue in read-write mode, creating it if it doesn't exists.
