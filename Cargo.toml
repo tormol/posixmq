@@ -1,6 +1,6 @@
 [package]
 name = "posixmq"
-version = "0.1.0"
+version = "0.1.1"
 description = "An idiomatic posix message queue wrapper for Linux and FreeBSD with optional mio integration"
 readme = "README.md"
 repository = "https://github.com/tormol/posixmq"
