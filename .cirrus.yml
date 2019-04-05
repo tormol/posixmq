@@ -22,7 +22,7 @@ task:
     - kldload mqueuefs
     - cargo test --features mio
     - cargo test --features mio -- --ignored --test-threads 1
-    - cargo run --example default_capacities
+    - cargo run --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -41,7 +41,7 @@ task:
   test_script:
     - cargo test --features mio
     - cargo test --features mio -- --ignored --test-threads 1
-    - cargo run --example default_capacities
+    - cargo run --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -61,5 +61,6 @@ task:
   test_script:
     - cargo test -Z minimal-versions --features mio
     - cargo test -Z minimal-versions --features mio -- --ignored --test-threads 1
+    - cargo run -Z minimal-versions --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
