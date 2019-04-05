@@ -39,8 +39,8 @@ fn open_custom_capacities() {
 #[test]
 fn create_and_remove() {
     let mq = OpenOptions::readwrite().create_new().open("/flash");
-    assert!(mq.is_ok());
-    assert!(unlink("/flash").is_ok());
+    mq.expect("cannot create");
+    unlink("/flash").expect("cannot unlink");
     assert_eq!(PosixMq::open("/flash").unwrap_err().kind(), ErrorKind::NotFound);
 }
 
