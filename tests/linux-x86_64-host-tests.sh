@@ -12,6 +12,7 @@ cargo test --target x86_64-unknown-linux-gnux32 --release --all-features -- --qu
 cargo test --target x86_64-unknown-linux-musl --all-features -- --quiet && \
 cargo check --target x86_64-unknown-netbsd --all-features --tests && \
 cargo check --target x86_64-unknown-freebsd --all-features --tests && \
+cargo check --target x86_64-sun-solaris --tests && \
 cargo check --target aarch64-unknown-linux-gnu --all-features --tests && \
 cargo check --target arm-unknown-linux-gnueabi --all-features --tests && \
 true

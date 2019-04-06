@@ -121,11 +121,11 @@
 //!
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris
 //! -|-|-|-|-|-|-
-//! core features | Yes | Yes | Yes | Yes | coming | coming
-//! mio `Evented` | Yes | Yes | unusable | Yes | No | No
+//! core features | Yes | Yes | Yes | Yes | Yes | Yes | Yes
+//! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
 //! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No
 //! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No
-//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No
+//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | Cross-`check`ed on CI
 //!
 //! This library will fail to compile if the target OS doesn't have posix
 //! message queues.
