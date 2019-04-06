@@ -60,7 +60,7 @@
 //! // an error of type `ErrorKind::WouldBlock`.
 //! ```
 //!
-//! With mio (and `features = ["mio"]`):
+//! With mio (and `features = ["mio"]` in Cargo.toml):
 #![cfg_attr(feature="mio", doc="```")]
 #![cfg_attr(not(feature="mio"), doc="```no_compile")]
 //! # extern crate mio;
@@ -123,10 +123,8 @@
 //! -|-|-|-|-|-|-|-|-
 //! core features | Yes | Yes | Yes | Yes | coming | coming | Yes
 //! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
-//! `Sync` | Yes | Yes | Yes | Yes | Yes | Yes | Yes
-//! `FromRawFd`+`IntoRawFd` | Yes | No | Yes | Yes | No | No | Yes
-//! `AsRawFd` | Yes | Yes | Yes | Yes | No | No | Yes
-//! `set_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
+//! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No | Yes
+//! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
 //! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No | Cross-compiles
 //!
 //! This library will fail to compile if the target OS doesn't support posix
@@ -134,16 +132,17 @@
 //!
 //! Feature explanations:
 //!
-//! * `FromRawFd+IntoRawFd`: For this to compile, the inner `mqd_t` type must
-//!   an `int` typedef, and bad things might happen if it doesn't represent a
-//!   file descriptor. These impls are currently on by default and only
-//!   disabled when known not to work.
-//! * `AsRawFd`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
+//! * `FromRawFd+IntoRawFd`+`try_clone()`: For this to work, the inner `mqd_t`
+//!   type must be an `int` typedef, and bad things might happen if it doesn't
+//!   represent a file descriptor. These impls are currently on by default and
+//!   only disabled when known not to work.
+//! * `AsRawFd`+`set_cloexec()`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
 //!   [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
-//!   which lets one get a file descriptor from a `mqd_t`.
-//! * `set_cloexec()`: Disabling close-on-exec requires `AsRawFd`.
-//!   `is_cloexec()` is always available and just returns `true` on OSes where
-//!   the behavior cannot be changed.
+//!   which lets one get a file descriptor from a `mqd_t`.  
+//!   Changing or querying close-on-exec requires `AsRawFd`. `is_cloexec()` is
+//!   always present and returns `true` on OSes where cloexec cannot be
+//!   disabled. (posix message queue descriptors should have close-on-exec set
+//!   by default).
 //! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
 //!   This does not guarantee that the polling mechanism used by mio supports
 //!   posix message queues though.
@@ -602,8 +601,9 @@ impl PosixMq {
     ///
     /// * Queue is full and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
     /// * Message is too big for the queue (EMSGSIZE) => `ErrorKind::Other`
-    /// * OS doesn't allow empty messages (EMSGSIZE) => `ErrorKind::Other`
+    /// * Message is zero-length and the OS doesn't allow this (EMSGSIZE) => `ErrorKind::Other`
     /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
+    /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
     pub fn send(&self,  priority: u32,  msg: &[u8]) -> Result<(), io::Error> {
         let bptr = msg.as_ptr() as *const c_char;
@@ -627,6 +627,7 @@ impl PosixMq {
     ///
     /// * Queue is empty and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
     /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
+    /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
     pub fn receive(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
@@ -844,7 +845,7 @@ impl PosixMq {
 /// Get an underlying file descriptor for the message queue.
 ///
 /// If you just need the raw `mqd_t`, use
-/// [`as_raw_mqd()`](struct.PosixMq.html#tymethod.as_raw_mqd)
+/// [`as_raw_mqd()`](struct.PosixMq.html#method.as_raw_mqd)
 /// instead for increased portability.
 ///
 /// This impl is not available on Illumos and Solaris.
@@ -873,7 +874,7 @@ impl AsRawFd for PosixMq {
 /// This impl is not available on FreeBSD, Illumos or Solaris; If you got a
 /// `mqd_t` in a portable fashion (from FFI code or by calling `mq_open()`
 /// yourself for some reason), use
-/// [`from_raw_mqd()`](struct.PosixMq.html#tymethod.from_raw_mqd) instead.
+/// [`from_raw_mqd()`](struct.PosixMq.html#method.from_raw_mqd) instead.
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -886,7 +887,7 @@ impl FromRawFd for PosixMq {
 ///
 /// This impl is not available on FreeBSD, Illumos or Solaris. If you need to
 /// transfer ownership to FFI code accepting a `mqd_t`, use
-/// [`into_raw_mqd()`](struct.PosixMq.html#tymethod.into_raw_mqd) instead.
+/// [`into_raw_mqd()`](struct.PosixMq.html#method.into_raw_mqd) instead.
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
