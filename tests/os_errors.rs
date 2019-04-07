@@ -1,3 +1,5 @@
+#![cfg(not(target_env="musl"))] // returns its own errors
+
 use std::ffi::CStr;
 #[cfg(target_os="linux")]
 use std::fs;
