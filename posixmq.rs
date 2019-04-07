@@ -484,8 +484,8 @@ impl OpenOptions {
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
         let mut capacities_ptr = ptr::null_mut::<mq_attr>();
         if opts.capacity != 0 || opts.max_msg_len != 0 {
-            capacities.mq_maxmsg = opts.capacity as AttrField;
-            capacities.mq_msgsize = opts.max_msg_len as AttrField;
+            capacities.mq_maxmsg = opts.capacity as KernelLong;
+            capacities.mq_msgsize = opts.max_msg_len as KernelLong;
             capacities_ptr = &mut capacities as *mut mq_attr;
         }
 
@@ -549,14 +549,14 @@ pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
 }
 
 
-// The fields of `mq_attr` are of type `long` on all targets except
-// x86_64-unknown-linux-gnux32, where they are `long long` (to match up with
-// normal x86_64 `long`).
+// The fields of `mq_attr` and `timespec` are of type `long` on all targets
+// except x86_64-unknown-linux-gnux32, where they are `long long` (to match up
+// with normal x86_64 `long`).
 // Rusts lack of implicit widening makes this peculiarity annoying.
 #[cfg(all(target_arch="x86_64", target_os="linux", target_pointer_width="32"))]
-type AttrField = i64;
+type KernelLong = i64;
 #[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
-type AttrField = c_long;
+type KernelLong = c_long;
 
 /// Contains information about the capacities and state of a posix message queue.
 ///
@@ -692,7 +692,7 @@ impl PosixMq {
                 max_msg_len: attrs.mq_msgsize as usize,
                 capacity: attrs.mq_maxmsg as usize,
                 current_messages: attrs.mq_curmsgs as usize,
-                nonblocking: (attrs.mq_flags & (O_NONBLOCK as AttrField)) != 0,
+                nonblocking: (attrs.mq_flags & (O_NONBLOCK as KernelLong)) != 0,
             }
         }
     }
@@ -719,7 +719,7 @@ impl PosixMq {
     /// [`attributes()`](struct.PosixMq.html#method.attributes) for details.
     pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
-        attrs.mq_flags = if nonblocking {O_NONBLOCK as AttrField} else {0};
+        attrs.mq_flags = if nonblocking {O_NONBLOCK as KernelLong} else {0};
         let res = unsafe { mq_setattr(self.mqd, &attrs, ptr::null_mut()) };
         if res == -1 {
             return Err(io::Error::last_os_error());
