@@ -12,6 +12,7 @@
 
 #define _POSIX_C_SOURCE 200809L // needed for O_CLOEXEC
 #include <mqueue.h>
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -36,9 +37,12 @@ void usage() {
     fprintf(stderr, "\tmq ls : list all existing queues\n\t\t(uses /dev/mqueue/)\n");
     fprintf(stderr, "\tmq rm /mqname... : mq_unlink() wrapper\n\t\tsupports multiple queues\n");
     fprintf(stderr, "\tmq stat (/mqname openmode)... : mq_getattr() wrapper\n\t\tsupports multiple queues\n");
-    fprintf(stderr, "\tmq read /mqname openmode : call mq_recv() once\n");
+    fprintf(stderr, "\tmq read /mqname openmode : call mq_receive() once\n");
     fprintf(stderr, "\t\tprints priority before the message content\n");
+    fprintf(stderr, "\tmq read /mqname openmode timeout: call mq_timedreceive() once\n");
+    fprintf(stderr, "\t\ttimeout is in seconds and must be an integer\n");
     fprintf(stderr, "\tmq write /mqname openmode priority message: call mq_send() once\n");
+    fprintf(stderr, "\tmq write /mqname openmode priority message timeout: call mq_timedsend() once\n");
     fprintf(stderr, "openmode format: flags[perms][,capacity,size]\n");
     fprintf(stderr, "\tflags: r=O_RDONLY, w=O_WRONLY, d=O_RDWR, c=O_CREAT, e=O_EXCL\n");
     fprintf(stderr, "\t       n=O_NONBLOCK, s=O_CLOEXEC\n");
@@ -126,10 +130,20 @@ mqd_t parseopts_open(char* qname, char* qopts) {
     }
 
     mqd_t q = mq_open(qname, opts, perms, caps_ptr);
-    if (q == -1) {
+    if (q == (mqd_t)-1) {
         printerr(errno, "opening", openerrdesc, 1);
     }
     return q;
+}
+
+struct timespec parse_timeout(char *timeout) {
+    struct timespec deadline;
+    if (clock_gettime(CLOCK_REALTIME, &deadline)) {
+        perror("Unable to get current system time.");
+        exit(1);
+    }
+    deadline.tv_sec += atoi(timeout);
+    return deadline;
 }
 
 
@@ -166,6 +180,7 @@ char* unlinkerrdesc(int err) {
 }
 
 int main(int argc, char* const* const argv) {
+    mqd_t q = (mqd_t)-1;
     if (argc < 2) {
         usage();
     } else if (!strcmp(argv[1], "ls") && argc == 2) {
@@ -194,26 +209,27 @@ int main(int argc, char* const* const argv) {
                 perror("bug or undocumented error!");
                 exit(1);
             }
-            printf("maxmsg: %ld\nmsgsize: %ld\ncurmsgs: %ld\nflags: 0x%lx\n",
-                attrs.mq_maxmsg, attrs.mq_msgsize, attrs.mq_curmsgs, attrs.mq_flags
+            printf("maxmsg: %ld\nmsgsize: %ld\ncurmsgs: %ld\nflags: 0x%lx\n (nonblocking: %s)\n",
+                (long)attrs.mq_maxmsg, (long)attrs.mq_msgsize, (long)attrs.mq_curmsgs,
+                (long)attrs.mq_flags, attrs.mq_flags & O_NONBLOCK ? "yes" : "no"
             );
-            if (mq_close(q)) {
-                perror("close queue");
-                exit(1);
-            }
        }
-       // there is no point in exposing mq_setattr(), because the only thing it
-       // can change is O_NONBLOCK
-    } else if ((!strcmp(argv[1], "read") || !strcmp(argv[1], "receive")) && argc == 4) {
+       // there is not much point in exposing mq_setattr(), because
+       // the only thing it can change is O_NONBLOCK
+    } else if ((!strcmp(argv[1], "read") || !strcmp(argv[1], "receive"))
+    && (argc == 4 || argc == 5)) {
         char buf[1024*1024];
         unsigned int prio;
-        mqd_t q = parseopts_open(argv[2], argv[3]);
-        ssize_t len = mq_receive(q, buf, 1024*1024, &prio);
+        ssize_t len;
+        q = parseopts_open(argv[2], argv[3]);
+        if (argc == 4) {
+            len = mq_receive(q, buf, 1024*1024, &prio);
+        } else {
+            struct timespec deadline = parse_timeout(argv[4]);
+            len = mq_timedreceive(q, buf, 1024*1024, &prio, &deadline);
+        }
         if (len == -1) {
             printerr(errno, "receiving", recverrdesc, 1);
-        } else if (mq_close(q)) {
-            perror("close queue");
-            exit(1);
         }
         printf("%2d ", prio);
         fwrite(&buf, len, 1, stdout);
@@ -222,16 +238,23 @@ int main(int argc, char* const* const argv) {
         mqd_t q = parseopts_open(argv[2], argv[3]);
         if (mq_send(q, argv[5], strlen(argv[5]), atoi(argv[4]))) {
             printerr(errno, "sending", senderrdesc, 1);
-        } else if (mq_close(q)) {
-            perror("close queue");
-            exit(1);
+        }
+    } else if ((!strcmp(argv[1], "write") || !strcmp(argv[1], "send")) && argc == 7) {
+        mqd_t q = parseopts_open(argv[2], argv[3]);
+        struct timespec deadline = parse_timeout(argv[6]);
+        if (mq_timedsend(q, argv[5], strlen(argv[5]), atoi(argv[4]), &deadline)) {
+            printerr(errno, "sending", senderrdesc, 1);
         }
     } else {
         fprintf(stderr, "unknown operation or wrong number of arguments\n");
         usage();
     }
-    // TODO support timeouts for send and receive
-    // TODO receive from or send to first available using select or aio
 
+    if (q != (mqd_t)-1) {
+        if (mq_close(q)) {
+            perror("close queue");
+            return 1;
+        }
+    }
     return 0;
 }
