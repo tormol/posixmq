@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L // for O_CLOEXEC
 #define _NETBSD_SOURCE // for F_DUPFD_CLOEXEC on NetBSD
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
@@ -47,19 +48,34 @@ int main(int argc, char **argv) {
     int with = mq_open("/test_cloexec", O_RDWR | O_CLOEXEC, 0644, NULL);
     test(argv[0], with, "with O_CLOEXEC");
 
-    test(argv[0], fcntl(without, F_DUPFD_CLOEXEC, 0), "cloned with F_DUPFD_CLOEXEC");
-    test(argv[0], dup(with), "dup()'d");
+    int dupfd_cloexec = fcntl(without, F_DUPFD_CLOEXEC, 0);
+    test(argv[0], dupfd_cloexec, "cloned with F_DUPFD_CLOEXEC");
+    int dupd = dup(with);
+    test(argv[0], dupd, "dup()'d");
 
     if (fcntl(without, F_SETFD, fcntl(without, F_GETFD)|FD_CLOEXEC) == -1) {
-       fprintf(stderr, "enabling cloexec failed: %s\n", strerror(errno));
+       fprintf(stderr, "enabling cloexec through fcntl() failed: %s\n", strerror(errno));
        return 1;
     }
-    test(argv[0], without, "enabled FD_CLOEXEC");
+    test(argv[0], without, "set FD_CLOEXEC");
     if (fcntl(with, F_SETFD, fcntl(with, F_GETFD)&~FD_CLOEXEC) == -1) {
-       fprintf(stderr, "disabling cloexec failed: %s\n", strerror(errno));
+       fprintf(stderr, "disabling cloexec through fcntl() failed: %s\n", strerror(errno));
        return 1;
     }
     test(argv[0], with, "cleared FD_CLOEXEC");
+
+    // use dupfd because it never is cloexec
+    if (ioctl(dupd, FIOCLEX) == -1) {
+       fprintf(stderr, "enabling cloexec through ioctl() failed: %s\n", strerror(errno));
+       return 1;
+    }
+    test(argv[0], dupd, "enabled by FIOCLEX");
+    // use without because setting FD_CLOEXEC always works
+    if (ioctl(without, FIONCLEX) == -1) {
+       fprintf(stderr, "disabling cloexec through ioctl() failed: %s\n", strerror(errno));
+       return 1;
+    }
+    test(argv[0], without, "disabled by FIONCLEX");
 
     return 0;
 }
