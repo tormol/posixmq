@@ -22,7 +22,7 @@
 //! # Examples
 //!
 //! Send a couple messages:
-//! ```
+//! ```ignore
 //! use posixmq::PosixMq;
 //!
 //! // open the message queue if it exists, or create it if it doesn't.
@@ -36,7 +36,7 @@
 //! ```
 //!
 //! and receive them:
-//! ```
+//! ```ignore
 //! use posixmq::PosixMq;
 //!
 //! // open the queue read-only, or fail if it doesn't exist.
@@ -62,7 +62,7 @@
 //!
 //! With mio (and `features = ["mio"]` in Cargo.toml):
 #![cfg_attr(feature="mio", doc="```")]
-#![cfg_attr(not(feature="mio"), doc="```no_compile")]
+#![cfg_attr(not(feature="mio"), doc="```ignore,compile_fail")]
 //! # extern crate mio;
 //! # use mio::{Events, PollOpt, Poll, Ready, Token};
 //! # use std::io::ErrorKind;
