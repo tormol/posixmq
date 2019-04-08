@@ -24,7 +24,7 @@ fn main() {
     let mq = posixmq::OpenOptions::readwrite()
         .nonblocking() // use WouldBlock to detect that the queue is empty
         .create_new()
-        .permissions(0o000) // only affects future attempts at opening it
+        .mode(0o000) // only affects future attempts at opening it
         .capacity(args.len())
         .max_msg_len(recv_buf.len())
         .open_c(name)

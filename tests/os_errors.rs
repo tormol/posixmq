@@ -1,5 +1,9 @@
 use std::ffi::CStr;
+#[cfg(target_os="linux")]
+use std::fs;
 use std::io::ErrorKind;
+#[cfg(target_os="linux")]
+use std::os::unix::fs::PermissionsExt;
 
 extern crate posixmq;
 use posixmq::{PosixMq, OpenOptions, unlink, unlink_c};
@@ -25,14 +29,6 @@ fn unlink_invalid_names() {
     let err = unlink("/foo/").unwrap_err().kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "/foo/");
     //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
-}
-
-#[test]
-fn invalid_permissions() {
-    let result = OpenOptions::readwrite().permissions(!0).create().open("/set_everything");
-    let _ = unlink("/set_everything");
-    // All tested operating systems ignore unknown bits
-    result.expect("unknown bits or permissions were not ignored");
 }
 
 #[cfg(not(any(
@@ -108,9 +104,9 @@ fn cstr_no_slash() {
     assert_eq!(err, ErrorKind::InvalidInput, "create noslash");
 }
 
+
 #[test]
 fn open_invalid_params() {
-    // won't get an error for invalid permissions (on Linux), beecause unknown bits are ignored
     assert_eq!(
         OpenOptions::readwrite().capacity(2).max_msg_len(0).create().open("zero_len").unwrap_err().kind(),
         ErrorKind::InvalidInput
@@ -127,4 +123,34 @@ fn open_invalid_params() {
         OpenOptions::readwrite().capacity(!0).max_msg_len(2).create().open("bad_cap").unwrap_err().kind(),
         ErrorKind::InvalidInput
     );
+}
+
+#[test]
+fn invalid_permissions() {
+    let result = OpenOptions::readwrite().mode(!0).create().open("/set_everything");
+    let _ = unlink("/set_everything");
+    // All tested operating systems ignore unknown bits
+    result.expect("unknown bits or permissions were not ignored");
+}
+
+#[cfg(target_os="linux")]
+#[test]
+fn default_permissions() {
+    let _ = PosixMq::create("/default_permissions").unwrap();
+    let metadata = fs::metadata("/dev/mqueue/default_permissions").unwrap();
+    let _ = unlink("/default_permissions");
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+}
+
+#[cfg(target_os="linux")]
+#[test]
+fn custom_permissions() {
+    let _ = OpenOptions::writeonly()
+        .mode(0o344) // bits unlikely to be affected by umask
+        .create()
+        .open("/custom_permissions")
+        .unwrap();
+    let metadata = fs::metadata("/dev/mqueue/custom_permissions").unwrap();
+    let _ = unlink("/custom_permissions");
+    assert_eq!(metadata.permissions().mode() & 0o777, 0o344);
 }

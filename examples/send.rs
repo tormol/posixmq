@@ -16,7 +16,7 @@ fn main() {
     // open the message queue
     let mq = posixmq::OpenOptions::writeonly()
         .create()
-        .permissions(0o666)
+        .mode(0o666) // FIXME set umask to actually make it sendable for others
         .open(args[0].as_bytes())
         .expect("opening failed");
 

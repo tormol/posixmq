@@ -309,8 +309,8 @@ fn name_to_cstring(name: &[u8]) -> Result<CString, io::Error> {
 /// message queue is opened or created.
 #[derive(Clone,Copy, PartialEq,Eq)]
 pub struct OpenOptions {
-    mode: c_int,
-    permissions: mode_t,
+    flags: c_int,
+    mode: mode_t,
     capacity: usize,
     max_msg_len: usize,
 }
@@ -318,24 +318,30 @@ pub struct OpenOptions {
 impl Debug for OpenOptions {
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
         fmtr.debug_struct("OpenOptions")
-            .field("read", &((self.mode & O_ACCMODE) == O_RDWR || (self.mode & O_ACCMODE) == O_RDONLY))
-            .field("write", &((self.mode & O_ACCMODE) == O_RDWR || (self.mode & O_ACCMODE) == O_WRONLY))
-            .field("create", &(self.mode & O_CREAT != 0))
-            .field("open", &(self.mode & O_EXCL == 0))
-            .field("permissions", &format_args!("{:03o}", self.permissions))
+            .field(
+                "read",
+                &((self.flags & O_ACCMODE) == O_RDWR  ||  (self.flags & O_ACCMODE) == O_RDONLY)
+             )
+            .field(
+                "write",
+                &((self.flags & O_ACCMODE) == O_RDWR  ||  (self.flags & O_ACCMODE) == O_WRONLY)
+             )
+            .field("create", &(self.flags & O_CREAT != 0))
+            .field("open", &(self.flags & O_EXCL == 0))
+            .field("mode", &format_args!("{:03o}", self.mode))
             .field("capacity", &self.capacity)
             .field("max_msg_len", &self.max_msg_len)
-            .field("nonblocking", &((self.mode & O_NONBLOCK) != 0))
+            .field("nonblocking", &((self.flags & O_NONBLOCK) != 0))
             .finish()
     }
 }
 
 impl OpenOptions {
-    fn new(mode: c_int) -> Self {
+    fn new(flags: c_int) -> Self {
         OpenOptions {
-            mode,
+            flags,
             // default permissions to only accessible for owner
-            permissions: 0o700,
+            mode: 0o600,
             capacity: 0,
             max_msg_len: 0,
         }
@@ -358,10 +364,16 @@ impl OpenOptions {
 
     /// Set permissions to create the queue with.
     ///
+    /// Some bits might be cleared by the process's umask when creating the
+    /// queue, and unknown bits are ignored.
+    ///
     /// This field is ignored if the queue already exists or should not be created.
-    /// If this method is not called, queues are created with permissions 700.
-    pub fn permissions(&mut self,  permissions: u16) -> &mut Self {
-        self.permissions = permissions as mode_t;
+    /// If this method is not called, queues are created with mode 600.
+    pub fn mode(&mut self,  mode: u32) -> &mut Self {
+        // 32bit value for consistency with std::os::unix even though only 12
+        // bits are needed. Truncate if necessary because the OS ignores
+        // unknown bits anyway. (and they're probably always zero as well).
+        self.mode = mode as mode_t;
         return self;
     }
 
@@ -396,20 +408,20 @@ impl OpenOptions {
 
     /// Create message queue if it doesn't exist.
     pub fn create(&mut self) -> &mut Self {
-        self.mode |= O_CREAT;
-        self.mode &= !O_EXCL;
+        self.flags |= O_CREAT;
+        self.flags &= !O_EXCL;
         return self;
     }
 
     /// Create a new queue, failing if the queue already exists.
     pub fn create_new(&mut self) -> &mut Self {
-        self.mode |= O_CREAT | O_EXCL;
+        self.flags |= O_CREAT | O_EXCL;
         return self;
     }
 
     /// Require the queue to already exist, failing if it doesn't.
     pub fn existing(&mut self) -> &mut Self {
-        self.mode &= !(O_CREAT | O_EXCL);
+        self.flags &= !(O_CREAT | O_EXCL);
         return self;
     }
 
@@ -417,7 +429,7 @@ impl OpenOptions {
     ///
     /// This must be done if you want to use the message queue with mio.
     pub fn nonblocking(&mut self) -> &mut Self {
-        self.mode |= O_NONBLOCK;
+        self.flags |= O_NONBLOCK;
         return self;
     }
 
@@ -467,7 +479,7 @@ impl OpenOptions {
 
         // because mq_open is a vararg function, mode_t cannot be passed
         // directly on FreeBSD where it's smaller than c_int.
-        let permissions = opts.permissions as c_int;
+        let permissions = opts.mode as c_int;
 
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
         let mut capacities_ptr = ptr::null_mut::<mq_attr>();
@@ -477,7 +489,7 @@ impl OpenOptions {
             capacities_ptr = &mut capacities as *mut mq_attr;
         }
 
-        let mqd = unsafe { mq_open(name.as_ptr(), opts.mode, permissions, capacities_ptr) };
+        let mqd = unsafe { mq_open(name.as_ptr(), opts.flags, permissions, capacities_ptr) };
         // even when mqd_t is a pointer, -1 is the return value for error
         if mqd == -1isize as mqd_t {
             return Err(io::Error::last_os_error());
