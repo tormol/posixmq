@@ -227,6 +227,10 @@
 // Depending on std also means that functions can use `io::Error` and
 // `SystemTime` instead of custom types.
 
+#![allow(clippy::needless_return, clippy::redundant_closure, clippy::needless_lifetimes)] // style
+#![allow(clippy::cast_lossless)] // improves portability when values are limited by the OS anyway
+// feel free to disable more lints
+
 use std::{io, mem, ptr};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
@@ -273,7 +277,7 @@ use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};
 /// so this function will then panic instead of returning a `Result`.
 pub fn name_from_bytes<N: AsRef<[u8]> + ?Sized>(name: &N) -> Cow<CStr> {
     let name = name.as_ref();
-    if name.len() > 0  &&  name[0] == b'/'  &&  name[name.len()-1] == b'\0' {
+    if !name.is_empty()  &&  name[0] == b'/'  &&  name[name.len()-1] == b'\0' {
         if let Ok(borrowed) = CStr::from_bytes_with_nul(name) {
             return Cow::Borrowed(borrowed);
         }
@@ -483,12 +487,13 @@ impl OpenOptions {
         let permissions = opts.mode as c_int;
 
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
-        let mut capacities_ptr = ptr::null_mut::<mq_attr>();
-        if opts.capacity != 0 || opts.max_msg_len != 0 {
+        let capacities_ptr = if opts.capacity != 0  ||  opts.max_msg_len != 0 {
             capacities.mq_maxmsg = opts.capacity as KernelLong;
             capacities.mq_msgsize = opts.max_msg_len as KernelLong;
-            capacities_ptr = &mut capacities as *mut mq_attr;
-        }
+            &mut capacities as *mut mq_attr
+        } else {
+            ptr::null_mut::<mq_attr>()
+        };
 
         let mqd = unsafe { mq_open(name.as_ptr(), opts.flags, permissions, capacities_ptr) };
         // even when mqd_t is a pointer, -1 is the return value for error
@@ -804,7 +809,7 @@ impl PosixMq {
     fn timedreceive(&self,  msgbuf: &mut[u8],  deadline: &timespec)
     -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
-        let mut priority = 0 as c_uint;
+        let mut priority: c_uint = 0;
         let len = retry_if_interrupted!(
             unsafe { mq_timedreceive(self.mqd, bptr, msgbuf.len(), &mut priority, deadline) }
         );
@@ -1054,13 +1059,13 @@ impl AsRawFd for PosixMq {
     // case on FreeBSD, Illumos and Solaris.
     #[cfg(not(target_os="freebsd"))]
     fn as_raw_fd(&self) -> RawFd {
-        self.mqd as RawFd
+        self.mqd
     }
 
     // FreeBSD has mq_getfd_np() (where _np stands for non-portable)
     #[cfg(target_os="freebsd")]
     fn as_raw_fd(&self) -> RawFd {
-        unsafe { mq_getfd_np(self.mqd) as RawFd }
+        unsafe { mq_getfd_np(self.mqd) }
     }
 }
 
@@ -1076,7 +1081,7 @@ impl AsRawFd for PosixMq {
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        PosixMq { mqd: fd as mqd_t }
+        PosixMq { mqd: fd }
     }
 }
 

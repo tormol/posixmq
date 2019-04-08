@@ -74,6 +74,8 @@ task:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
+    - rustup component add clippy
+    - cargo clippy --features mio
     - rustup target add x86_64-unknown-netbsd
     - cargo check --target x86_64-unknown-netbsd --features mio --tests
     - rustup target add x86_64-sun-solaris
