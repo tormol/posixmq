@@ -3,7 +3,7 @@ task:
   freebsd_instance:
     image: freebsd-11-2-release-amd64
     cpu: 1
-    memory: 4
+    memory: 1
   env:
     RUST_BACKTRACE: 1
   setup_script:
@@ -27,9 +27,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 stable
+  name: Linux amd64 1.31
   container:
-    image: rust:latest
+    image: rust:1.31
     cpu: 1
     memory: 1
   cargo_cache:
@@ -51,7 +51,7 @@ task:
     image: rustlang/rust:nightly
     cpu: 1
     memory: 1
-  allow_failures: true
+  allow_failures: false
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
@@ -60,8 +60,6 @@ task:
     - cargo build -Z minimal-versions --features mio
   test_script:
     - cargo test -Z minimal-versions --features mio
-    - cargo test -Z minimal-versions --features mio -- --ignored --test-threads 1
-    - cargo run -Z minimal-versions --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
