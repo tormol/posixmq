@@ -114,21 +114,21 @@
 //!
 //! While the p in POSIX stands for Portable, that is not a fitting description
 //! of their message queues; Support is spotty even among *nix OSes.
-//! **Windows, macOS, OpenBSD, Android, ios, Rumprun and Emscripten doesn't
-//! support posix message queues at all.**
+//! **Windows, macOS, OpenBSD, Android, ios, Rumprun, Fuchsia and Emscripten
+//! doesn't support posix message queues at all.**
 //!
 //! ## Compatible operating systems and features
 //!
-//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris | Fuchsia
-//! -|-|-|-|-|-|-|-|-
-//! core features | Yes | Yes | Yes | Yes | coming | coming | Yes
-//! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
-//! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No | Yes
-//! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No | Yes
-//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No | Cross-compiles
+//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris
+//! -|-|-|-|-|-|-
+//! core features | Yes | Yes | Yes | Yes | coming | coming
+//! mio `Evented` | Yes | Yes | unusable | Yes | No | No
+//! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No
+//! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No
+//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | No
 //!
-//! This library will fail to compile if the target OS doesn't support posix
-//! message queues at all.
+//! This library will fail to compile if the target OS doesn't have posix
+//! message queues.
 //!
 //! Feature explanations:
 //!
@@ -776,8 +776,8 @@ impl PosixMq {
     /// and not reused for something else yet.
     #[cfg(not(any(target_os="illumos", target_os="solaris")))]
     pub unsafe fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
-        // Race-prone but portable; Linux and the BSDs have fcntl(, F_IOCLEX)
-        // but Fuchsia doesn't. (Neither does solarish, but that's moot.)
+        // Race-prone but portable; Linux and the BSDs have ioctl(, FIOCLEX)
+        // TODO try that.
         // https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/fd.rs#L173
         let prev = fcntl(self.as_raw_fd(), F_GETFD);
         if prev == -1 {
@@ -961,7 +961,7 @@ unsafe impl Send for PosixMq {}
 //  src: https://github.com/illumos/illumos-gate/blob/master/usr/src/lib/libc/port/rt/mqueue.c
 // Solaris I assume is equivalent to Illumos, because the Illumos code has
 // barely been modified after the initial source code release.
-// Linux, NetBSD, DragonFlyBSD and Fuchsia gets Sync auto-implemented because
+// Linux, NetBSD and DragonFlyBSD gets Sync auto-implemented because
 // mqd_t is an int.
 #[cfg(any(target_os="freebsd", target_os="illumos", target_os="solaris"))]
 unsafe impl Sync for PosixMq {}

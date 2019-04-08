@@ -11,7 +11,6 @@ cargo test --target i686-unknown-linux-gnu --all-features -- --quiet && \
 cargo test --target x86_64-unknown-linux-gnux32 --release --all-features -- --quiet && \
 cargo check --target x86_64-unknown-netbsd --all-features --tests && \
 cargo check --target x86_64-unknown-freebsd --all-features --tests && \
-cargo check --target x86_64-fuchsia --tests && \
 cargo check --target aarch64-unknown-linux-gnu --all-features --tests && \
 cargo check --target arm-unknown-linux-gnueabi --all-features --tests && \
 true

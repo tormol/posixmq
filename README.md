@@ -15,7 +15,7 @@ loop {
 
 ## Supported operating systems
 
-Not all operating systems have posix message queues: Linux and most BSDs have them, but macOS, OpenBSD and Windows doesn't. See the crate documentation for details.
+Not all operating systems have posix message queues: Linux and most BSDs have them, but macOS, OpenBSD and Windows doesn't. See the rustdoc for details.
 
 ## mio integration
 
