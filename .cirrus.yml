@@ -70,21 +70,22 @@ task:
     cpu: 2
     memory: 1
   allow_failures: false
+  setup_script:
+    - rustup component add clippy
+    - rustup target add x86_64-unknown-netbsd
+    - rustup target add x86_64-sun-solaris
+    - rustup target add i686-unknown-linux-gnu
+    - rustup target add x86_64-unknown-linux-gnux32
+    - rustup target add aarch64-unknown-linux-gnu
   cargo_cache:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
-    - rustup component add clippy
     - cargo clippy --features mio
-    - rustup target add x86_64-unknown-netbsd
     - cargo check --target x86_64-unknown-netbsd --features mio --tests
-    - rustup target add x86_64-sun-solaris
     - cargo check --target x86_64-sun-solaris --tests
-    - rustup target add i686-unknown-linux-gnu
     - cargo check --target i686-unknown-linux-gnu --features mio --tests
-    - rustup target add x86_64-unknown-linux-gnux32
     - cargo check --target x86_64-unknown-linux-gnux32 --features mio --tests
-    - rustup target add aarch64-unknown-linux-gnu
     - cargo check --target aarch64-unknown-linux-gnu --features mio --tests
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
