@@ -253,7 +253,7 @@ use libc::{timespec, time_t, mq_timedsend, mq_timedreceive};
 use libc::mq_getfd_np;
 use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NONBLOCK};
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-use libc::{fcntl, F_GETFD, F_SETFD, FD_CLOEXEC};
+use libc::{fcntl, ioctl, F_GETFD, FD_CLOEXEC, FIOCLEX, FIONCLEX};
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 use libc::F_DUPFD_CLOEXEC;
 
@@ -502,12 +502,12 @@ impl OpenOptions {
         }
         let mq = PosixMq{mqd};
 
-        // NetBSD and DragonFlyBSD doesn't set cloexec by default and
-        // ignores O_CLOEXEC. Setting it with FD_CLOEXEC works though.
+        // NetBSD and DragonFly doesn't set cloexec by default and
+        // ignores O_CLOEXEC. Setting it with FIOCLEX works though.
         // Propagate error if setting cloexec somehow fails, even though
         // close-on-exec won't matter in most cases.
         #[cfg(any(target_os="netbsd", target_os="dragonfly"))]
-        unsafe { mq.set_cloexec(true) }?;
+        mq.set_cloexec(true)?;
 
         Ok(mq)
     }
@@ -932,7 +932,7 @@ impl PosixMq {
         };
         // NetBSD (but not DragonFlyBSD) ignores the cloexec part of F_DUPFD_CLOEXEC
         #[cfg(target_os="netbsd")]
-        unsafe { mq.set_cloexec(true) }?;
+        mq.set_cloexec(true)?;
         Ok(mq)
     }
 
@@ -967,39 +967,20 @@ impl PosixMq {
     ///
     /// This function is not available on Illumos or Solaris.
     ///
-    /// # Safety
-    ///
-    /// This function has a race condition with itself, as the flag
-    /// cannot portably be set atomically without affecting other attributes.
-    ///
     /// # Errors
     ///
     /// This function should only fail if the underlying file descriptor has
     /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
     /// and not reused for something else yet.
     #[cfg(not(any(target_os="illumos", target_os="solaris")))]
-    pub unsafe fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
-        // Race-prone but portable; Linux and the BSDs have ioctl(, FIOCLEX)
-        // TODO try that.
-        // https://github.com/rust-lang/rust/blob/master/src/libstd/sys/unix/fd.rs#L173
-        let prev = fcntl(self.as_raw_fd(), F_GETFD);
-        if prev == -1 {
+    pub fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
+        let op = if cloexec {FIOCLEX} else {FIONCLEX};
+        match unsafe { ioctl(self.as_raw_fd(), op) } {
             // Don't hide the error here, because callers can ignore the
             // returned value if they want.
-            return Err(io::Error::last_os_error());
+            -1 => Err(io::Error::last_os_error()),
+            _ => Ok(())
         }
-        let new = if cloexec {
-            prev | FD_CLOEXEC
-        } else {
-            prev & !FD_CLOEXEC
-        };
-        if new != prev {
-            let ret = fcntl(self.as_raw_fd(), F_SETFD, new);
-            if ret == -1 {
-                return Err(io::Error::last_os_error());
-            }
-        }
-        Ok(())
     }
 
 

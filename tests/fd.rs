@@ -18,9 +18,9 @@ fn is_cloexec() {
 fn change_cloexec() {
     let mq = PosixMq::create("/change_cloexec").unwrap();
     let _ = unlink("/change_cloexec");
-    unsafe { mq.set_cloexec(false).unwrap() };
+    mq.set_cloexec(false).unwrap();
     assert!(!mq.is_cloexec());
-    unsafe { mq.set_cloexec(true).unwrap() };
+    mq.set_cloexec(true).unwrap();
     assert!(mq.is_cloexec());
 }
 
