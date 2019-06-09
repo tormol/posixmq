@@ -13,7 +13,8 @@
 //! additional priority parameter. Queues are not placed in the normal file
 //! system, but uses a separate, flat namespace. Normal file permissions still
 //! apply though.
-//! For a longer introduction, see `man mq_overview` or `man mq`.
+//! For a longer introduction, see [`man mq_overview`](https://linux.die.net/man/7/mq_overview)
+//! or [`man mq`](https://www.unix.com/man-page/netbsd/3/mq/).
 //!
 //! They are not all that useful, as only Linux and some BSDs implement them,
 //! and even there you might be limited to creating queues with a capacity of
@@ -45,8 +46,8 @@
 //! // otherwise it will remain until the system is rebooted, consuming
 //! posixmq::unlink("/hello_posixmq").unwrap();
 //!
-//! // the receive buffer must be at least as big as the biggest possible message,
-//! // or you will not be allowed to receive anything.
+//! // the receive buffer must be at least as big as the biggest possible
+//! // message, or you will not be allowed to receive anything.
 //! let mut buf = vec![0; mq.attributes().max_msg_len];
 //! assert_eq!(mq.receive(&mut buf).unwrap(), (10, "Hello,".len()));
 //! assert_eq!(mq.receive(&mut buf).unwrap(), (0, "message".len()));
@@ -119,7 +120,7 @@
 //!
 //! ## Compatible operating systems and features
 //!
-//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFlyBSD | Illumos | Solaris
+//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFly | Illumos | Solaris
 //! -|-|-|-|-|-|-
 //! core features | Yes | Yes | Yes | Yes | Yes | Yes | Yes
 //! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
@@ -136,16 +137,16 @@
 //!   type must be an `int` typedef, and bad things might happen if it doesn't
 //!   represent a file descriptor. These impls are currently on by default and
 //!   only disabled when known not to work.
-//! * `AsRawFd`+`set_cloexec()`: similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has
-//!   [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
+//! * `AsRawFd`+`set_cloexec()`: similar to `FromRawFd` and `IntoRawFd`, but
+//!   FreeBSD 11+ has [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
 //!   which lets one get a file descriptor from a `mqd_t`.  
 //!   Changing or querying close-on-exec requires `AsRawFd`. `is_cloexec()` is
 //!   always present and returns `true` on OSes where cloexec cannot be
 //!   disabled. (posix message queue descriptors should have close-on-exec set
 //!   by default).
 //! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
-//!   This does not guarantee that the polling mechanism used by mio supports
-//!   posix message queues though.
+//!   This does not guarantee that the event notification mechanism used by mio
+//!   supports posix message queues though.
 //!
 //! On Linux, message queues and their permissions can be viewed in
 //! `/dev/mqueue/`. The kernel *can* be compiled to not support posix message
@@ -163,19 +164,17 @@
 //! queue once.  
 //! The mio integration compiles, but registering message queues with mio fails.  
 //! Because NetBSD ignores cloexec when opening or cloning descriptors, there
-//! is a race condition with other threads exec'ing before cloexec is enabled
-//! for the descriptor.
+//! is a race condition with other threads exec'ing before this library can
+//! enable close-on-exec for the descriptor.
 //!
-//! On Illumos and Solaris, the libc crate doesn't have the necessary functions
-//! or types at the moment so this library won't compile. Once a libc version
-//! with those is released, the core features will become useable.
+//! DragonFly doesn't set cloexec when opening either, but does when cloning.
 //!
 //! ## OS-dependent restrictions and default values
 //!
 //! Not even limiting oneself to the core features is enough to guarantee
 //! portability!
 //!
-//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFlyBSD | Illumos
+//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFly | Illumos
 //! -|-|-|-|-|-
 //! max priority | 32767 | 63 | **31** | 31 | 31
 //! default capacity | 10 | 10 | 32 | 32 | 128
@@ -199,22 +198,16 @@
 //!
 //! # Minimum Rust version
 //!
-//! The minimum supported Rust version is 1.31.  
-//! While the crate might currently compile on older versions, a minor release
-//! can break this.
-//! Until rustup has builds for DragonFlyBSD and Illumos, this crate will never
-//! require a newer Rust version than what is available in the DragonFlyBSD or
-//! Joyent repositories.
+//! The minimum supported Rust version is 1.31.
 //!
-//! # Missing and planned features
+//! # Possible additional features that haven't been implemented yet
 //!
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
-//! * tmpfile equivalent
 //! * Querying and possibly changing limits and default values
 //! * Struct that deletes the message queue when dropped
-//! * Test or check more platforms on CI
-//! * Support more OSes?
+//! * tmpfile equivalent
+//! * Test more platforms on CI
 //! * `mq_notify()`?
 //!
 //! Please open an issue if you want any of them.
@@ -930,7 +923,7 @@ impl PosixMq {
             -1 => return Err(io::Error::last_os_error()),
             fd => PosixMq{mqd: fd},
         };
-        // NetBSD (but not DragonFlyBSD) ignores the cloexec part of F_DUPFD_CLOEXEC
+        // NetBSD (but not DragonFly) ignores the cloexec part of F_DUPFD_CLOEXEC
         #[cfg(target_os="netbsd")]
         mq.set_cloexec(true)?;
         Ok(mq)
@@ -1035,7 +1028,7 @@ impl PosixMq {
 /// This impl is not available on Illumos and Solaris.
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
 impl AsRawFd for PosixMq {
-    // On Linux, NetBSD and DragonFlyBSD, `mqd_t` is a plain file descriptor
+    // On Linux, NetBSD and DragonFly, `mqd_t` is a plain file descriptor
     // and can trivially be convverted, but this is not guaranteed, nor the
     // case on FreeBSD, Illumos and Solaris.
     #[cfg(not(target_os="freebsd"))]
@@ -1062,7 +1055,7 @@ impl AsRawFd for PosixMq {
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        PosixMq { mqd: fd }
+        PosixMq{mqd: fd}
     }
 }
 
@@ -1145,13 +1138,13 @@ unsafe impl Send for PosixMq {}
 //  src: https://github.com/illumos/illumos-gate/blob/master/usr/src/lib/libc/port/rt/mqueue.c
 // Solaris I assume is equivalent to Illumos, because the Illumos code has
 // barely been modified after the initial source code release.
-// Linux, NetBSD and DragonFlyBSD gets Sync auto-implemented because
+// Linux, NetBSD and DragonFly gets Sync auto-implemented because
 // mqd_t is an int.
 #[cfg(any(target_os="freebsd", target_os="illumos", target_os="solaris"))]
 unsafe impl Sync for PosixMq {}
 
 
-/// Make posix message queues pollable by mio.
+/// Allow receiving event notifications for posix message queues through mio.
 ///
 /// This impl requires the `mio` feature to be enabled:
 ///

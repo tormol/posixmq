@@ -15,11 +15,13 @@ loop {
 
 ## Supported operating systems
 
-Not all operating systems have posix message queues: Linux and most BSDs have them, but macOS, OpenBSD and Windows doesn't. See the rustdoc for details.
+posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly and OmniOS, but not all features are available everywhere. See rustdoc for details.  
+***macOS, OpenBSD and Windows doesn't have posix message queues**, and this crate will fail to compile there.
 
 ## mio integration
 
-On Linux, FreeBSD and DragonFlyBSD posix message queues can be polled, and therefore used with [mio](https://github.com/carllerche/mio). This feature is not enabled by default; enable it in Cargo.toml with:
+On Linux, FreeBSD and DragonFly posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/carllerche/mio).
+This feature is not enabled by default; enable it in Cargo.toml with:
 
 ```toml
 [dependencies]
@@ -30,16 +32,14 @@ Also remember to open the message queues in nonblocking mode.
 
 ## Differences from [posix_mq](https://github.com/aprilabank/posix_mq.rs)
 
-* `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, which avoids unnecessary allocations.
+* `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
 * Supports deadlines / timeouts.
-* Optionally integrates with `mio` so the message queues can be polled.
+* Optionally integrates with `mio`.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
 
 ## Minimum Rust version
 
-The minimum supported Rust version is 1.31.  
-While the crate might currently compile on older versions, a minor release can break this.
-Until rustup has builds for DragonFlyBSD and Illumos, this crate will never require a newer Rust version than what is available in the DragonFlyBSD or Joyent repositories.
+The minimum supported Rust version is 1.31.
 
 ## License
 

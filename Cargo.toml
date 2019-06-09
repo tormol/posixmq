@@ -1,7 +1,7 @@
 [package]
 name = "posixmq"
 version = "0.1.1"
-description = "An idiomatic posix message queue wrapper for Linux and FreeBSD with optional mio integration"
+description = "An idiomatic posix message queue wrapper with optional mio integration"
 readme = "README.md"
 repository = "https://github.com/tormol/posixmq"
 license = "Apache-2.0 / MIT"
@@ -12,7 +12,7 @@ exclude = ["/tests/**", "/examples/**"] # contains more than just tests and exam
 edition = "2018"
 
 [dependencies]
-libc = "0.2.51" # .51 added FreeBSD's mq_getfd_np() and corrected DragonFlyBSD's mqd_t
+libc = "0.2.51" # .51 added FreeBSD's mq_getfd_np() and corrected DragonFly's mqd_t
 mio = {version = "0.6.14", optional=true} # .13 drags in libc 0.1 when built with -Z minimal-versions
 
 [lib]
