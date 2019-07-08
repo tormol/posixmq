@@ -196,9 +196,12 @@
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
 //!
-//! # Minimum Rust version
+//! # Minimum supported Rust version
 //!
-//! The minimum supported Rust version is 1.31.
+//! The minimum supported Rust version for 1.0.z releases is 1.31.1.  
+//! Later 1.y.0 releases might increase this. Until rustup has builds for
+//! DragonFly and Illumos, the minimum version will not be increased past what
+//! is available in repositories for these operating systems.
 //!
 //! # Possible additional features that haven't been implemented yet
 //!

@@ -37,9 +37,12 @@ Also remember to open the message queues in nonblocking mode.
 * Optionally integrates with `mio`.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
 
-## Minimum Rust version
+## Minimum supported Rust version
 
-The minimum supported Rust version is 1.31.
+The minimum supported Rust version for 1.0.z releases is 1.31.1.  
+Later 1.y.0 releases might increase this. Until rustup has builds for DragonFly and Illumos, the minimum version will not be increased past what is available in repositories for these operating systems.
+To lock to a minor release, use `posixmq = "1.0.*"` in Cargo.toml, or just copy
+posixmq.rs into your project.
 
 ## License
 
