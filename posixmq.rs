@@ -1150,7 +1150,7 @@ unsafe impl Sync for PosixMq {}
 ///
 /// ```toml
 /// [dependencies]
-/// posixmq = {version="0.1", features="mio"}
+/// posixmq = {version="0.2", features=["mio"]}
 /// ```
 ///
 /// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)

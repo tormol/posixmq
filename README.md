@@ -25,7 +25,7 @@ This feature is not enabled by default; enable it in Cargo.toml with:
 
 ```toml
 [dependencies]
-posixmq = {version="0.1", features=["mio"]}
+posixmq = {version="0.2", features=["mio"]}
 ```
 
 Also remember to open the message queues in nonblocking mode.

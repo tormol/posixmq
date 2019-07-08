@@ -1,6 +1,6 @@
 [package]
 name = "posixmq"
-version = "0.1.1"
+version = "0.2.0"
 description = "An idiomatic posix message queue wrapper with optional mio integration"
 readme = "README.md"
 repository = "https://github.com/tormol/posixmq"
@@ -14,7 +14,7 @@ edition = "2018"
 [dependencies]
 libc = "0.2.59"
 # 0.2.59 added mq_timed{send,receive}() and FIONCLEX for Linux and all mq_ functions for solarish
-mio = {version = "0.6.14", optional=true}
+mio = {version="0.6.14", optional=true}
 # 0.6.13 drags in libc 0.1 when built with -Z minimal-versions
 
 [lib]
