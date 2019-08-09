@@ -300,6 +300,25 @@ fn name_to_cstring(name: &[u8]) -> Result<CString, io::Error> {
     CString::new(buf).map_err(|err| io::Error::from(err) )
 }
 
+const CSTR_BUF_SIZE: usize = 32;
+fn with_name_as_cstr<F: FnOnce(&CStr)->Result<R,io::Error>, R>(mut name: &[u8],  f: F)
+-> Result<R,io::Error> {
+    if name.first() == Some(&b'/') {
+        name = &name[1..];
+    }
+    if name.len() > CSTR_BUF_SIZE - 2 {
+        name_to_cstring(name).and_then(|longbuf| f(&longbuf) )
+    } else {
+        let mut shortbuf = [0; CSTR_BUF_SIZE];
+        shortbuf[0] = b'/';
+        shortbuf[1..name.len()+1].copy_from_slice(name);
+        match CStr::from_bytes_with_nul(&shortbuf[..name.len()+2]) {
+            Ok(name) => f(name),
+            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "contains nul byte"))
+        }
+    }
+}
+
 
 // Cannot use std::fs's because it doesn't expose getters,
 // and rolling our own means we can also use it for mq-specific capacities.
@@ -450,7 +469,10 @@ impl OpenOptions {
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
     /// * Possibly other
     pub fn open<N: AsRef<[u8]> + ?Sized>(&self,  name: &N) -> Result<PosixMq, io::Error> {
-        name_to_cstring(name.as_ref()).and_then(|name| self.open_c(&name) )
+        pub fn open_slice(opts: &OpenOptions,  name: &[u8]) -> Result<PosixMq, io::Error> {
+            with_name_as_cstr(name.as_ref(), |name| opts.open_c(&name) )
+        }
+        open_slice(self, name.as_ref())
     }
 
     /// Open a queue with the specified options and without inspecting `name`
@@ -519,7 +541,10 @@ impl OpenOptions {
 /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
 /// * Possibly other
 pub fn unlink<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
-    name_to_cstring(name.as_ref()).and_then(|name| unlink_c(&name) )
+    fn unlink_slice(name: &[u8]) -> Result<(), io::Error> {
+        with_name_as_cstr(name, |name| unlink_c(&name) )
+    }
+    unlink_slice(name.as_ref())
 }
 
 /// Delete a posix message queue, without inspecting `name` or allocating.
