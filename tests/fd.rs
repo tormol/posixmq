@@ -64,23 +64,23 @@ fn into_fd_doesnt_drop() {
 fn mio() {
     use std::io::ErrorKind;
     use posixmq::OpenOptions;
-    use mio::{Poll, Events, PollOpt, Ready, Token};
+    use mio::{Events, Poll, Interest, Token};
 
     // Start the poll before creating masseage queues so that the syscalls are
     // easier to separate when debugging.
     let mut events = Events::with_capacity(8);
-    let poll = Poll::new().expect("cannot create mio Poll");
+    let mut poll = Poll::new().expect("cannot create mio Poll");
 
     let mut opts = OpenOptions::readwrite();
     let opts = opts.nonblocking().capacity(1).max_msg_len(10).create_new();
-    let mq_a = opts.open("/mio_a").unwrap();
-    let mq_b = opts.open("/mio_b").unwrap();
+    let mut mq_a = opts.open("/mio_a").unwrap();
+    let mut mq_b = opts.open("/mio_b").unwrap();
     let _ = unlink("/mio_a");
     let _ = unlink("/mio_b");
 
-    poll.register(&mq_b, Token(1), Ready::readable(), PollOpt::edge())
+    poll.registry().register(&mut mq_b, Token(1), Interest::READABLE)
         .expect("cannot register message queue with poll");
-    poll.register(&mq_a, Token(0), Ready::readable(), PollOpt::edge())
+    poll.registry().register(&mut mq_a, Token(0), Interest::READABLE)
         .expect("cannot register message queue with poll");
 
     // test readable
@@ -94,22 +94,22 @@ fn mio() {
     assert_eq!(mq_a.receive(&mut[0;10]).unwrap_err().kind(), ErrorKind::WouldBlock);
 
     // test reregister & writable
-    poll.reregister(&mq_b, Token(1), Ready::writable(), PollOpt::edge()).unwrap();
+    poll.registry().reregister(&mut mq_b, Token(1), Interest::WRITABLE).unwrap();
     poll.poll(&mut events, None).unwrap();
     let mut iter = events.iter();
     assert_eq!(iter.next().unwrap().token(), Token(1));
     assert!(iter.next().is_none());
     // drain & restore readiness
     mq_b.send(10, b"b").unwrap();
-    mq_b.receive(&mut[0;10]).unwrap();
+    mq_b.receive(&mut[0; 10]).unwrap();
 
     // test deregister
-    poll.deregister(&mq_a).unwrap();
+    poll.registry().deregister(&mut mq_a).unwrap();
     mq_a.send(2, b"2").unwrap();
     poll.poll(&mut events, None).unwrap();
     let mut iter = events.iter();
     assert_eq!(iter.next().unwrap().token(), Token(1));
     assert!(iter.next().is_none());
 
-    poll.deregister(&mq_b).unwrap();
+    poll.registry().deregister(&mut mq_b).unwrap();
 }

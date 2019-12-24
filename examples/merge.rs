@@ -10,7 +10,7 @@ fn main() {
     use std::env::args;
     use std::io::ErrorKind;
 
-    use mio::{Poll, Events, PollOpt, Ready, Token};
+    use mio::{Poll, Events, Interest, Token};
 
     let mut queues = args().skip(1).collect::<Vec<_>>();
     let dst = queues.pop().expect("arguments required");
@@ -25,16 +25,18 @@ fn main() {
     }
 
     // open destination queue
-    let dst = match posixmq::OpenOptions::writeonly().nonblocking().create().open(&dst) {
+    let mut dst = match posixmq::OpenOptions::writeonly().nonblocking().create().open(&dst) {
         Ok(mq) => (mq, dst),
         Err(e) => panic!("Cannot open or create {:?} for sending: {}", dst, e),
     };
 
-    let poll = Poll::new().expect("Cannot create selector");
-    poll.register(&dst.0, Token(0), Ready::writable(), PollOpt::edge())
+    let mut poll = Poll::new().expect("Cannot create selector");
+    poll.registry()
+        .register(&mut dst.0, Token(0), Interest::WRITABLE)
         .expect("registering destination failed");
-    for (i, &(ref src, _)) in src.iter().enumerate() {
-        poll.register(src, Token(i+1), Ready::readable(), PollOpt::edge())
+    for (i, &mut(ref mut src, _)) in src.iter_mut().enumerate() {
+        poll.registry()
+            .register(src, Token(i+1), Interest::READABLE)
             .expect("registering a source failed");
     }
 

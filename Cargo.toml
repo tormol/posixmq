@@ -14,11 +14,13 @@ edition = "2018"
 [dependencies]
 libc = "0.2.59"
 # 0.2.59 added mq_timed{send,receive}() and FIONCLEX for Linux and all mq_ functions for solarish
-mio = {version="0.6.14", optional=true}
-# 0.6.13 drags in libc 0.1 when built with -Z minimal-versions
+mio = {version="0.7.0-alpha", features=["os-util"], optional=true}
 
 [lib]
 path = "posixmq.rs"
+
+[target.'cfg(feature="mio")'.dev-dependencies]
+mio = {version="0.7.0-alpha", features=["os-poll"]}
 
 [package.metadata.docs.rs]
 features = ["mio"]

@@ -65,11 +65,11 @@
 #![cfg_attr(feature="mio", doc="```")]
 #![cfg_attr(not(feature="mio"), doc="```ignore,compile_fail")]
 //! # extern crate mio;
-//! # use mio::{Events, PollOpt, Poll, Ready, Token};
+//! # use mio::{Events, Poll, Interest, Token};
 //! # use std::io::ErrorKind;
 //! # use std::thread;
 //! // set up queue
-//! let receiver = posixmq::OpenOptions::readonly()
+//! let mut receiver = posixmq::OpenOptions::readonly()
 //!     .nonblocking()
 //!     .capacity(3)
 //!     .max_msg_len(100)
@@ -85,8 +85,8 @@
 //! });
 //!
 //! // set up mio and register
-//! let poll = Poll::new().unwrap();
-//! poll.register(&receiver, Token(0), Ready::readable(), PollOpt::edge()).unwrap();
+//! let mut poll = Poll::new().unwrap();
+//! poll.registry().register(&mut receiver, Token(0), Interest::READABLE).unwrap();
 //! let mut events = Events::with_capacity(10);
 //!
 //! poll.poll(&mut events, None).unwrap();
@@ -123,7 +123,7 @@
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFly | Illumos | Solaris
 //! -|-|-|-|-|-|-
 //! core features | Yes | Yes | Yes | Yes | Yes | Yes | Yes
-//! mio `Evented` | Yes | Yes | unusable | Yes | No | No | No
+//! mio `Source` | Yes | Yes | unusable | Yes | No | No | No
 //! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No
 //! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No
 //! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | Cross-`check`ed on CI
@@ -144,7 +144,7 @@
 //!   always present and returns `true` on OSes where cloexec cannot be
 //!   disabled. (posix message queue descriptors should have close-on-exec set
 //!   by default).
-//! * mio `Evented`: The impl requires both `AsRawFd` and that mio compiless.
+//! * mio `Source`: The impl requires both `AsRawFd` and that mio compiless.
 //!   This does not guarantee that the event notification mechanism used by mio
 //!   supports posix message queues though.
 //!
@@ -253,7 +253,7 @@ use libc::F_DUPFD_CLOEXEC;
 #[cfg(feature="mio")]
 extern crate mio;
 #[cfg(feature="mio")]
-use mio::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt, Token};
+use mio::{event::Source, unix::SourceFd, Registry, Token, Interest};
 
 
 /// Helper function for converting a `str` or byte slice into a C string
@@ -1180,19 +1180,19 @@ unsafe impl Sync for PosixMq {}
 ///
 /// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
 #[cfg(feature="mio")]
-impl Evented for PosixMq {
-    fn register(&self,  poll: &Poll,  token: Token,  interest: Ready,  opts: PollOpt)
+impl Source for PosixMq {
+    fn register(&mut self,  registry: &Registry,  token: Token,  interest: Interest)
     -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).register(poll, token, interest, opts)
+        SourceFd(&self.as_raw_fd()).register(registry, token, interest)
     }
 
-    fn reregister(&self,  poll: &Poll,  token: Token,  interest: Ready,  opts: PollOpt)
+    fn reregister(&mut self,  registry: &Registry,  token: Token,  interest: Interest)
     -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).reregister(poll, token, interest, opts)
+        SourceFd(&self.as_raw_fd()).reregister(registry, token, interest)
     }
 
-    fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).deregister(poll)
+    fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
+        SourceFd(&self.as_raw_fd()).deregister(registry)
     }
 }
 
