@@ -93,15 +93,15 @@
 //! for event in &events {
 //!     if event.token() == Token(0) {
 //!         loop {
-//!            let mut buf = [0; 100];
-//!            match receiver.receive(&mut buf) {
-//!                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-//!                Err(e) => panic!("Error receiving message: {}", e),
-//!                Ok((priority, len)) => {
-//!                    assert_eq!(priority, 0);
-//!                    assert_eq!(&buf[..len], b"async");
-//!                }
-//!            }
+//!             let mut buf = [0; 100];
+//!             match receiver.receive(&mut buf) {
+//!                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
+//!                 Err(e) => panic!("Error receiving message: {}", e),
+//!                 Ok((priority, len)) => {
+//!                     assert_eq!(priority, 0);
+//!                     assert_eq!(&buf[..len], b"async");
+//!                 }
+//!             }
 //!         }
 //!     }
 //! }
@@ -150,7 +150,7 @@
 //!
 //! On Linux, message queues and their permissions can be viewed in
 //! `/dev/mqueue/`. The kernel *can* be compiled to not support posix message
-//! queues, so it's not guaranteed to always work. (sch as on Adroid)
+//! queues, so it's not guaranteed to always work. (such as on Android)
 //!
 //! On FreeBSD, the kernel module responsible for posix message queues
 //! is not loaded by default; Run `kldload mqueuefs` as root to enable it.
