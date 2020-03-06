@@ -18,19 +18,19 @@ loop {
 posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly and OmniOS, but not all features are available everywhere. See rustdoc for details.  
 ***macOS, OpenBSD and Windows doesn't have posix message queues**, and this crate will fail to compile there.
 
-## mio integration
+## optional mio integration
 
-On Linux, FreeBSD and DragonFly posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/carllerche/mio).
-This feature is not enabled by default; enable it in Cargo.toml with:
+On Linux, FreeBSD and DragonFly posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/tokio-rs/mio).
+Both mio version 0.6 and 0.7 are supported, through the opt-in crate features `mio_06` and `mio_07`. Enable the integrato with the version you use in Cargo.toml with for example:
 
 ```toml
 [dependencies]
-posixmq = {version="0.2", features=["mio"]}
+posixmq = {version="0.2", features=["mio_07"]}
 ```
 
 Also remember to open the message queues in nonblocking mode.
 
-## Differences from [posix_mq](https://github.com/aprilabank/posix_mq.rs)
+## Differences from the [posix_mq](https://github.com/aprilabank/posix_mq.rs) crate
 
 * `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
 * Supports deadlines / timeouts.

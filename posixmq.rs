@@ -61,10 +61,10 @@
 //! // an error of type `ErrorKind::WouldBlock`.
 //! ```
 //!
-//! With mio (and `features = ["mio"]` in Cargo.toml):
-#![cfg_attr(feature="mio", doc="```")]
-#![cfg_attr(not(feature="mio"), doc="```ignore,compile_fail")]
-//! # extern crate mio;
+//! With mio (and `features = ["mio_07"]` in Cargo.toml):
+#![cfg_attr(feature="mio_07", doc="```")]
+#![cfg_attr(not(feature="mio_07"), doc="```compile_fail")]
+//! # extern crate mio_07 as mio;
 //! # use mio::{Events, Poll, Interest, Token};
 //! # use std::io::ErrorKind;
 //! # use std::thread;
@@ -250,10 +250,14 @@ use libc::{fcntl, ioctl, F_GETFD, FD_CLOEXEC, FIOCLEX, FIONCLEX};
 #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
 use libc::F_DUPFD_CLOEXEC;
 
-#[cfg(feature="mio")]
-extern crate mio;
-#[cfg(feature="mio")]
-use mio::{event::Source, unix::SourceFd, Registry, Token, Interest};
+#[cfg(feature="mio_06")]
+extern crate mio_06;
+#[cfg(feature="mio_06")]
+use mio_06::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt};
+#[cfg(feature="mio_07")]
+extern crate mio_07;
+#[cfg(feature="mio_07")]
+use mio_07::{event::Source, unix::SourceFd, Registry, Interest};
 
 
 /// Helper function for converting a `str` or byte slice into a C string
@@ -1169,30 +1173,75 @@ unsafe impl Send for PosixMq {}
 unsafe impl Sync for PosixMq {}
 
 
-/// Allow receiving event notifications for posix message queues through mio.
+/// Allow receiving event notifications through mio (version 0.6).
 ///
-/// This impl requires the `mio` feature to be enabled:
+/// This impl requires the `mio_06` feature to be enabled:
 ///
 /// ```toml
 /// [dependencies]
-/// posixmq = {version="0.2", features=["mio"]}
+/// posixmq = {version="0.2", features=["mio_06"]}
 /// ```
 ///
 /// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
-#[cfg(feature="mio")]
-impl Source for PosixMq {
-    fn register(&mut self,  registry: &Registry,  token: Token,  interest: Interest)
+#[cfg(feature="mio_06")]
+impl Evented for PosixMq {
+    fn register(&self,  poll: &Poll,  token: mio_06::Token,  interest: Ready,  opts: PollOpt)
+    -> Result<(), io::Error> {
+        EventedFd(&self.as_raw_fd()).register(poll, token, interest, opts)
+    }
+
+    fn reregister(&self,  poll: &Poll,  token: mio_06::Token,  interest: Ready,  opts: PollOpt)
+    -> Result<(), io::Error> {
+        EventedFd(&self.as_raw_fd()).reregister(poll, token, interest, opts)
+    }
+
+    fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
+        EventedFd(&self.as_raw_fd()).deregister(poll)
+    }
+}
+
+
+/// Allow receiving event notifications through mio (version 0.7).
+///
+/// This impl requires the `mio_07` feature to be enabled:
+///
+/// ```toml
+/// [dependencies]
+/// posixmq = {version="0.2", features=["mio_07"]}
+/// ```
+///
+/// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
+#[cfg(feature="mio_07")]
+impl Source for &PosixMq {
+    fn register(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
     -> Result<(), io::Error> {
         SourceFd(&self.as_raw_fd()).register(registry, token, interest)
     }
 
-    fn reregister(&mut self,  registry: &Registry,  token: Token,  interest: Interest)
+    fn reregister(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
     -> Result<(), io::Error> {
         SourceFd(&self.as_raw_fd()).reregister(registry, token, interest)
     }
 
     fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
         SourceFd(&self.as_raw_fd()).deregister(registry)
+    }
+}
+
+#[cfg(feature="mio_07")]
+impl Source for PosixMq {
+    fn register(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
+    -> Result<(), io::Error> {
+        {&mut &*self}.register(registry, token, interest)
+    }
+
+    fn reregister(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
+    -> Result<(), io::Error> {
+        {&mut &*self}.reregister(registry, token, interest)
+    }
+
+    fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
+        {&mut &*self}.deregister(registry)
     }
 }
 
