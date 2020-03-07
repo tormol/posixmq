@@ -55,7 +55,7 @@ fn main() {
 
             let &(ref mq, ref name) = &src[event.token().0-1];
             loop {
-                match mq.receive(&mut buf) {
+                match mq.recv(&mut buf) {
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
                     Err(e) => panic!("Error receiving from {}: {}", name, e),
                     Ok((priority, len)) => unsent.push((priority, Box::from(&buf[..len]), name)),

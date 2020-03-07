@@ -51,7 +51,7 @@ fn into_fd_doesnt_drop() {
         mq.send(0, b"foo").unwrap();
         let fd = mq.into_raw_fd();
         let mq = PosixMq::from_raw_fd(fd);
-        assert_eq!(mq.receive(&mut[0; 8192]).unwrap(), (0, 3));
+        assert_eq!(mq.recv(&mut[0; 8192]).unwrap(), (0, 3));
     }
 }
 
@@ -87,8 +87,8 @@ fn mio_06() {
     assert_eq!(iter.next().unwrap().token(), Token(0));
     assert!(iter.next().is_none());
     // drain readiness
-    mq_a.receive(&mut[0;10]).unwrap();
-    assert_eq!(mq_a.receive(&mut[0;10]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    mq_a.recv(&mut[0;10]).unwrap();
+    assert_eq!(mq_a.recv(&mut[0;10]).unwrap_err().kind(), ErrorKind::WouldBlock);
 
     // test reregister & writable
     poll.reregister(&mq_b, Token(1), Ready::writable(), PollOpt::edge()).unwrap();
@@ -98,7 +98,7 @@ fn mio_06() {
     assert!(iter.next().is_none());
     // drain & restore readiness
     mq_b.send(10, b"b").unwrap();
-    mq_b.receive(&mut[0; 10]).unwrap();
+    mq_b.recv(&mut[0; 10]).unwrap();
 
     // test deregister
     poll.deregister(&mq_a).unwrap();
@@ -142,8 +142,8 @@ fn mio_07() {
     assert_eq!(iter.next().unwrap().token(), Token(0));
     assert!(iter.next().is_none());
     // drain readiness
-    mq_a.receive(&mut[0;10]).unwrap();
-    assert_eq!(mq_a.receive(&mut[0;10]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    mq_a.recv(&mut[0;10]).unwrap();
+    assert_eq!(mq_a.recv(&mut[0;10]).unwrap_err().kind(), ErrorKind::WouldBlock);
 
     // test reregister & writable
     poll.registry().reregister(&mut &mq_b, Token(1), Interest::WRITABLE).unwrap();
@@ -153,7 +153,7 @@ fn mio_07() {
     assert!(iter.next().is_none());
     // drain & restore readiness
     mq_b.send(10, b"b").unwrap();
-    mq_b.receive(&mut[0; 10]).unwrap();
+    mq_b.recv(&mut[0; 10]).unwrap();
 
     // test deregister
     poll.registry().deregister(&mut &mq_a).unwrap();

@@ -39,7 +39,7 @@ fn main() {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     loop {
-        match mq.receive(&mut recv_buf) {
+        match mq.recv(&mut recv_buf) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
             Err(e) => panic!("receiving failed: {}", e),
             Ok((_priority, len)) => {

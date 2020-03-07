@@ -41,7 +41,7 @@ fn main() {
 
     println!("max message priority:           {}", btry(0xff_ff_ff_ff, |priority| {
         mq.send(priority as u32, b"b")
-            .map(|_| mq.receive(&mut vec![0; attrs.max_msg_len]).unwrap() )
+            .map(|_| mq.recv(&mut vec![0; attrs.max_msg_len]).unwrap() )
             .is_ok()
     }));
     println!("allows empty messages:          {}", mq.send(0, b"").is_ok());

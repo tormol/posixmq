@@ -32,7 +32,7 @@ fn main() {
 
     if let Some(Some(timeout)) = timeout {
         let mut buf = vec![0; mq.attributes().max_msg_len];
-        while let Ok((priority, len)) = mq.receive_timeout(&mut buf, timeout) {
+        while let Ok((priority, len)) = mq.recv_timeout(&mut buf, timeout) {
             print!("{:3}\t", priority);
             stdout().write_all(&buf[..len]).expect("writing to stdout failed");
             println!();

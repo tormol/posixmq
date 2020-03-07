@@ -49,9 +49,9 @@
 //! // the receive buffer must be at least as big as the biggest possible
 //! // message, or you will not be allowed to receive anything.
 //! let mut buf = vec![0; mq.attributes().max_msg_len];
-//! assert_eq!(mq.receive(&mut buf).unwrap(), (10, "Hello,".len()));
-//! assert_eq!(mq.receive(&mut buf).unwrap(), (0, "message".len()));
-//! assert_eq!(mq.receive(&mut buf).unwrap(), (0, "queue".len()));
+//! assert_eq!(mq.recv(&mut buf).unwrap(), (10, "Hello,".len()));
+//! assert_eq!(mq.recv(&mut buf).unwrap(), (0, "message".len()));
+//! assert_eq!(mq.recv(&mut buf).unwrap(), (0, "queue".len()));
 //! assert_eq!(&buf[..5], b"queue");
 //!
 //! // check that there are no more messages
@@ -94,7 +94,7 @@
 //!     if event.token() == Token(0) {
 //!         loop {
 //!             let mut buf = [0; 100];
-//!             match receiver.receive(&mut buf) {
+//!             match receiver.recv(&mut buf) {
 //!                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
 //!                 Err(e) => panic!("Error receiving message: {}", e),
 //!                 Ok((priority, len)) => {
@@ -191,7 +191,7 @@
 //!
 //! # Differences from the C API
 //!
-//! * `send()` and `receive()` tries again when EINTR / `ErrorKind::Interrupted`
+//! * `send()` and `recv()` tries again when EINTR / `ErrorKind::Interrupted`
 //!   is returned. (Consistent with normal Rust io)
 //! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
 //!   the name if missing. (They allocate anyway, to append a terminating '\0')
@@ -403,7 +403,7 @@ impl OpenOptions {
 
     /// Set the maximum size of each message.
     ///
-    /// `receive()` will fail if given a buffer smaller than this value.
+    /// `recv()` will fail if given a buffer smaller than this value.
     ///
     /// If max_msg_len and capacity are both zero (or not set), the queue
     /// will be created with a maximum length and capacity decided by the
@@ -749,7 +749,7 @@ impl PosixMq {
     /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
     /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn receive(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
+    pub fn recv(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
         let mut priority = 0 as c_uint;
         let len = retry_if_interrupted!(
@@ -760,7 +760,7 @@ impl PosixMq {
         Ok((priority as u32, len as usize))
     }
 
-    /// Returns an `Iterator` which calls `receive()` repeatedly with an
+    /// Returns an `Iterator` which calls `recv()` repeatedly with an
     /// appropriately sized buffer.
     ///
     /// If the message queue is opened in non-blocking mode the iterator can be
@@ -855,7 +855,7 @@ impl PosixMq {
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Timeout is too long / not representable => `ErrorKind::InvalidInput`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn receive_timeout(&self,  msgbuf: &mut[u8],  timeout: Duration)
+    pub fn recv_timeout(&self,  msgbuf: &mut[u8],  timeout: Duration)
     -> Result<(u32, usize), io::Error> {
         timeout_to_realtime(timeout).and_then(|expires| self.timedreceive(msgbuf, &expires) )
     }
@@ -875,7 +875,7 @@ impl PosixMq {
     /// * Queue is empty and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn receive_deadline(&self,  msgbuf: &mut[u8],  deadline: SystemTime)
+    pub fn recv_deadline(&self,  msgbuf: &mut[u8],  deadline: SystemTime)
     -> Result<(u32, usize), io::Error> {
         match deadline_to_realtime(deadline) {
             Ok(expires) => self.timedreceive(msgbuf, &expires),
@@ -896,7 +896,7 @@ impl PosixMq {
     /// The rationale for swallowing these errors is that they're only caused
     /// by buggy code (incorrect usage of `from_raw_fd()` or similar),
     /// and not having to `.unwrap()` makes the function nicer to use.  
-    /// Future `send()` and `receive()` will reveal the bug when they also fail.
+    /// Future `send()` and `recv()` will reveal the bug when they also fail.
     /// (Which also means they won't block.)
     pub fn attributes(&self) -> Attributes {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
@@ -1249,10 +1249,9 @@ impl Source for PosixMq {
 }
 
 
-/// An `Iterator` that [`receive()`](struct.PosixMq.html#method.receive)s
-/// messages from a borrowed [`PosixMq`](struct.PosixMq.html).
+/// An `Iterator` that calls [`recv()`](struct.PosixMq.html#method.recv) on a borrowed [`PosixMq`](struct.PosixMq.html).
 ///
-/// Iteration ends when a `receive()` fails with a `WouldBlock` error, but is
+/// Iteration ends when a `recv()` fails with a `WouldBlock` error, but is
 /// infinite if the descriptor is opened in blocking mode.
 ///
 /// # Panics
@@ -1268,7 +1267,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = (u32, Vec<u8>);
     fn next(&mut self) -> Option<(u32, Vec<u8>)> {
         let mut buf = vec![0; self.max_msg_len];
-        match self.mq.receive(&mut buf) {
+        match self.mq.recv(&mut buf) {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
             Err(e) => panic!("Cannot receive from posix message queue: {}", e),
             Ok((priority, len)) => {
@@ -1279,10 +1278,10 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-/// An `Iterator` that [`receive()`](struct.PosixMq.html#method.receive)s
+/// An `Iterator` that [`recv()`](struct.PosixMq.html#method.recv)s
 /// messages from an owned [`PosixMq`](struct.PosixMq.html).
 ///
-/// Iteration ends when a `receive()` fails with a `WouldBlock` error, but is
+/// Iteration ends when a `recv()` fails with a `WouldBlock` error, but is
 /// infinite if the descriptor is opened in blocking mode.
 ///
 /// # Panics

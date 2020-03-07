@@ -64,7 +64,7 @@ fn is_nonblocking() {
     let _ = posixmq::unlink("/is_nonblocking");
 
     assert!(mq.is_nonblocking());
-    assert_eq!(mq.receive(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    assert_eq!(mq.recv(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.send(5, b"e").unwrap();
     assert_eq!(mq.send(6, b"f").unwrap_err().kind(), ErrorKind::WouldBlock);
 }
@@ -75,7 +75,7 @@ fn change_nonblocking() {
     let _ = posixmq::unlink("/change_nonblocking");
     mq.set_nonblocking(true).unwrap();
     assert!(mq.is_nonblocking());
-    assert_eq!(mq.receive(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    assert_eq!(mq.recv(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.set_nonblocking(false).unwrap();
     assert!(!mq.is_nonblocking());
 }
@@ -111,7 +111,7 @@ fn send_errors() {
 }
 
 #[test]
-fn receive_errors() {
+fn recv_errors() {
     let nb = OpenOptions::readonly()
         .nonblocking()
         .create()
@@ -119,10 +119,10 @@ fn receive_errors() {
         .capacity(2)
         .open("receive")
         .unwrap();
-    assert_eq!(nb.receive(&mut[0; 2]).unwrap_err().kind(), ErrorKind::WouldBlock);
-    assert_eq!(nb.receive(&mut[]).unwrap_err().kind(), ErrorKind::Other); // buffer too short
+    assert_eq!(nb.recv(&mut[0; 2]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    assert_eq!(nb.recv(&mut[]).unwrap_err().kind(), ErrorKind::Other); // buffer too short
     let wo = OpenOptions::writeonly().open("receive").unwrap();
-    assert_eq!(wo.receive(&mut[0; 2]).unwrap_err().kind(), ErrorKind::Other); // opened write-only
+    assert_eq!(wo.recv(&mut[0; 2]).unwrap_err().kind(), ErrorKind::Other); // opened write-only
 
     let _ = unlink("receive");
 }
@@ -138,13 +138,13 @@ fn send_and_receive() {
     mq.send(3, b"d").unwrap();
 
     let mut buf = [0; 8192];
-    assert_eq!(mq.receive(&mut buf).unwrap(), (4, 3));
+    assert_eq!(mq.recv(&mut buf).unwrap(), (4, 3));
     assert_eq!(&buf[..3], b"bbb");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (3, 1));
+    assert_eq!(mq.recv(&mut buf).unwrap(), (3, 1));
     assert_eq!(&buf[..3], b"dbb");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (2, 4));
+    assert_eq!(mq.recv(&mut buf).unwrap(), (2, 4));
     assert_eq!(&buf[..4], b"aaaa");
-    assert_eq!(mq.receive(&mut buf).unwrap(), (1, 2));
+    assert_eq!(mq.recv(&mut buf).unwrap(), (1, 2));
     assert_eq!(&buf[..4], b"ccaa");
 }
 

@@ -24,12 +24,12 @@ fn tmp_mq(name: &str) -> PosixMq {
 #[test]
 fn timeout_doesnt_block_indefinitely() {
     let mq = tmp_mq("/timed_send_and_receive");
-    let err = mq.receive_timeout(&mut[0; 64], Duration::from_millis(10)).unwrap_err().kind();
+    let err = mq.recv_timeout(&mut[0; 64], Duration::from_millis(10)).unwrap_err().kind();
     assert_eq!(err, ErrorKind::TimedOut);
     mq.send_timeout(1, b"1", Duration::from_millis(10)).unwrap();
     let err = mq.send_timeout(2, b"2", Duration::from_millis(10)).unwrap_err().kind();
     assert_eq!(err, ErrorKind::TimedOut);
-    mq.receive_timeout(&mut[0; 64], Duration::from_millis(10)).unwrap();
+    mq.recv_timeout(&mut[0; 64], Duration::from_millis(10)).unwrap();
 }
 
 #[test]
@@ -37,11 +37,11 @@ fn subsecond_timeouts_matter() {
     let mq = Arc::new(tmp_mq("/tiny_timeouts_matter"));
     let long_mq = mq.clone();
     let long = thread::spawn(move|| {
-        long_mq.receive_timeout(&mut[0; 64], Duration::from_millis(500))
+        long_mq.recv_timeout(&mut[0; 64], Duration::from_millis(500))
     });
     let short_mq = mq.clone();
     let short = thread::spawn(move|| {
-        short_mq.receive_timeout(&mut[0; 64], Duration::from_millis(100))
+        short_mq.recv_timeout(&mut[0; 64], Duration::from_millis(100))
     });
     thread::sleep(Duration::from_millis(300));
     mq.send(0, b"patience is a virtue").unwrap();
@@ -54,11 +54,11 @@ fn fullsecond_timeouts_matter() {
     let mq = Arc::new(tmp_mq("/big_timeouts_matter"));
     let long_mq = mq.clone();
     let long = thread::spawn(move|| {
-        long_mq.receive_timeout(&mut[0; 64], Duration::from_secs(2))
+        long_mq.recv_timeout(&mut[0; 64], Duration::from_secs(2))
     });
     let short_mq = mq.clone();
     let short = thread::spawn(move|| {
-        short_mq.receive_timeout(&mut[0; 64], Duration::new(1, 100_000_000))
+        short_mq.recv_timeout(&mut[0; 64], Duration::new(1, 100_000_000))
     });
     thread::sleep(Duration::from_millis(1_550));
     mq.send(0, b"patience is a virtue").unwrap();
@@ -70,9 +70,9 @@ fn fullsecond_timeouts_matter() {
 fn deadline() {
     let mq = tmp_mq("/deadline");
     let later = SystemTime::now() + Duration::from_secs(1);
-    assert_eq!(mq.receive_deadline(&mut[0; 64], later).unwrap_err().kind(), ErrorKind::TimedOut);
+    assert_eq!(mq.recv_deadline(&mut[0; 64], later).unwrap_err().kind(), ErrorKind::TimedOut);
     // returns immediately after the previous call timed out.
-    assert_eq!(mq.receive_deadline(&mut[0; 64], later).unwrap_err().kind(), ErrorKind::TimedOut);
+    assert_eq!(mq.recv_deadline(&mut[0; 64], later).unwrap_err().kind(), ErrorKind::TimedOut);
     let later = SystemTime::now() + Duration::from_secs(1);
     mq.send_deadline(0, b"I won't wait *forever*", later).unwrap();
     let result = mq.send_deadline(0, b"I won't wait *forever*", later);
@@ -82,9 +82,9 @@ fn deadline() {
 #[test]
 fn expired() {
     let mq = tmp_mq("/expired");
-    let result = mq.receive_timeout(&mut[0; 64], Duration::from_nanos(0));
+    let result = mq.recv_timeout(&mut[0; 64], Duration::from_nanos(0));
     assert_eq!(result.unwrap_err().kind(), ErrorKind::TimedOut);
-    let result = mq.receive_deadline(&mut[0; 64], SystemTime::now() - Duration::new(10, 10));
+    let result = mq.recv_deadline(&mut[0; 64], SystemTime::now() - Duration::new(10, 10));
     assert_eq!(result.unwrap_err().kind(), ErrorKind::TimedOut);
     // now() expires before the syscall is made
     mq.send_deadline(0, b"no time but space", SystemTime::now()).unwrap();
@@ -103,7 +103,7 @@ fn ignored_when_nonblocking() {
         .unwrap();
     let _ = unlink("/deadline_is_now");
     let later = SystemTime::now() + Duration::from_secs(60);
-    let result = mq.receive_deadline(&mut[0; 64], later);
+    let result = mq.recv_deadline(&mut[0; 64], later);
     assert_eq!(result.unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.send_deadline(0, b"I can't wait", later).unwrap();
     let result = mq.send_deadline(0, b"I can't wait", later);
@@ -138,12 +138,12 @@ fn negative_deadline() {
         ErrorKind::TimedOut
     };
     let no_fraction = SystemTime::UNIX_EPOCH - Duration::from_secs(365*24*60*60);
-    let result = mq.receive_deadline(&mut[0; 64], no_fraction);
+    let result = mq.recv_deadline(&mut[0; 64], no_fraction);
     assert_eq!(result.expect_err("negative deadline").kind(), error);
     let only_fraction = SystemTime::UNIX_EPOCH - Duration::new(0, 100_000_000);
-    let result = mq.receive_deadline(&mut[0; 64], only_fraction);
+    let result = mq.recv_deadline(&mut[0; 64], only_fraction);
     assert_eq!(result.expect_err("negative deadline").kind(), error);
     let with_fraction = SystemTime::UNIX_EPOCH - Duration::new(10, 999_999_999);
-    let result = mq.receive_deadline(&mut[0; 64], with_fraction);
+    let result = mq.recv_deadline(&mut[0; 64], with_fraction);
     assert_eq!(result.expect_err("negative deadline").kind(), error);
 }

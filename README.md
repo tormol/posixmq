@@ -8,7 +8,7 @@ A Rust library for working with [posix message queues](https://linux.die.net/man
 let mq = posixmq::PosixMq::open("/queue")?;
 let mut buf = vec![0; mq.attributes().max_msg_size];
 loop {
-    let (priority, len) = mq.receive(&mut buf)?;
+    let (priority, len) = mq.recv(&mut buf)?;
     println!("priority: {:3}, message: {}", priority, str::from_utf8(&buf[..len])?);
 }
 ```
@@ -32,7 +32,7 @@ Also remember to open the message queues in nonblocking mode.
 
 ## Differences from the [posix_mq](https://github.com/aprilabank/posix_mq.rs) crate
 
-* `send()` and `receive()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
+* `send()` and `recv()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
 * Supports deadlines / timeouts.
 * Optionally integrates with `mio`.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
