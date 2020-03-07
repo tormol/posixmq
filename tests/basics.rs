@@ -3,7 +3,7 @@
 use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, Attributes, unlink, name_from_bytes};
+use posixmq::{PosixMq, OpenOptions, Attributes, unlink};
 
 #[test]
 fn name_with_nul() {
@@ -178,39 +178,6 @@ fn iterator_panics_if_writeonly() {
     for (_, _) in mq {
 
     }
-}
-
-
-#[test]
-fn name_from_bytes_normal() {
-    use std::borrow::Cow;
-
-    match name_from_bytes("/good\0") {
-        Cow::Borrowed(cstr) => assert_eq!(cstr.to_bytes(), b"/good"),
-        _ => panic!("should not allocate here"),
-    }
-    match name_from_bytes(b"/bad") {
-        Cow::Owned(cstring) => assert_eq!(cstring.to_bytes(), b"/bad"),
-        _ => panic!("should allocate for missing \\0"),
-    }
-    match name_from_bytes("bad\0") {
-        Cow::Owned(cstring) => assert_eq!(cstring.to_bytes(), b"/bad"),
-        _ => panic!("should allocate for missing slash"),
-    }
-    match name_from_bytes("doubly_bad") {
-        Cow::Owned(cstring) => assert_eq!(cstring.to_bytes(), b"/doubly_bad"),
-        _ => panic!("should allocate for doubly bad"),
-    }
-    match name_from_bytes(b"") {
-        Cow::Owned(cstring) => assert_eq!(cstring.to_bytes(), b"/"),
-        _ => panic!("should allocate for empty slice"),
-    }
-}
-
-#[test]
-#[should_panic]
-fn name_from_bytes_interior_nul() {
-    name_from_bytes("/good\0shit\0");
 }
 
 

@@ -228,7 +228,6 @@
 // feel free to disable more lints
 
 use std::{io, mem, ptr};
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
@@ -262,40 +261,6 @@ extern crate mio_07;
 #[cfg(feature="mio_07")]
 use mio_07::{event::Source, unix::SourceFd, Registry, Interest};
 
-
-/// Helper function for converting a `str` or byte slice into a C string
-/// without allocating when possible.
-///
-/// The input is returned as-is if it starts with a '/' and ends with a '\0'.
-/// Otherwise a new string is created with those characters included.
-///
-/// The name must not contain interior '\0' bytes.
-///
-/// # Panics
-///
-/// If the name contains interior NUL ('\0') bytes it is likely due to a bug,
-/// so this function will then panic instead of returning a `Result`.
-pub fn name_from_bytes<N: AsRef<[u8]> + ?Sized>(name: &N) -> Cow<CStr> {
-    let name = name.as_ref();
-    if !name.is_empty()  &&  name[0] == b'/'  &&  name[name.len()-1] == b'\0' {
-        if let Ok(borrowed) = CStr::from_bytes_with_nul(name) {
-            return Cow::Borrowed(borrowed);
-        }
-    } else {
-        let mut owned = Vec::with_capacity(name.len()+2);
-        if name.first() != Some(&b'/') {
-            owned.push(b'/');
-        }
-        owned.extend_from_slice(name);
-        if name.last() == Some(&b'\0') {
-            owned.pop();
-        }
-        if let Ok(owned) = CString::new(owned) {
-            return Cow::Owned(owned);
-        }
-    }
-    panic!("Queue name contains interior '\0' bytes");
-}
 
 /// Internal helper for converting to C string and prepending '/' when missing.
 fn name_to_cstring(name: &[u8]) -> Result<CString, io::Error> {
