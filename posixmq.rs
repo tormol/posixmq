@@ -1263,3 +1263,15 @@ impl Iterator for IntoIter {
         Iter{mq: &self.mq, max_msg_len: self.max_msg_len}.next()
     }
 }
+
+
+#[cfg(debug_assertions)]
+mod doctest_md_files {
+    macro_rules! mdfile {($content:expr, $(#[$meta:meta])* $attach_to:ident) => {
+        #[doc=$content]
+        #[allow(unused)]
+        $(#[$meta])* // can't #[cfg_attr(, doc=)] in .md file
+        enum $attach_to {}
+    }}
+    mdfile!{include_str!("README.md"), Readme}
+}

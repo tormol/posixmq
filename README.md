@@ -4,12 +4,13 @@ A Rust library for working with [posix message queues](https://linux.die.net/man
 
 [![crates.io](https://img.shields.io/crates/v/posixmq.svg)](https://crates.io/crates/posixmq) [![Build Status](https://api.cirrus-ci.com/github/tormol/posixmq.svg)](https://cirrus-ci.com/github/tormol/posixmq) ![License](https://img.shields.io/crates/l/posixmq.svg) [![Documentation](https://docs.rs/posixmq/badge.svg)](https://docs.rs/posixmq/)
 
-```rust
-let mq = posixmq::PosixMq::open("/queue")?;
-let mut buf = vec![0; mq.attributes().max_msg_size];
+```rust,no_run
+let mq = posixmq::PosixMq::open("/queue").expect("cannot open /queue");
+let mut buf = vec![0; mq.attributes().max_msg_len];
 loop {
-    let (priority, len) = mq.recv(&mut buf)?;
-    println!("priority: {:3}, message: {}", priority, str::from_utf8(&buf[..len])?);
+    let (priority, len) = mq.recv(&mut buf).expect("recv() failed");
+    let msg = std::str::from_utf8(&buf[..len]).expect("not UTF-8");
+    println!("priority: {:3}, message: {}", priority, msg);
 }
 ```
 
