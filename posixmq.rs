@@ -1222,7 +1222,8 @@ impl Source for PosixMq {
 ///
 /// # Panics
 ///
-/// `next()` can panic if an error of type other than `WouldBlock` is produced.
+/// `next()` can panic if an error other than `ErrorKind::WouldBlock` is produced.
+#[derive(Clone)]
 pub struct Iter<'a> {
     mq: &'a PosixMq,
     /// Cached
