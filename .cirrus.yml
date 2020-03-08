@@ -16,12 +16,14 @@ task:
   build_script:
     - . $HOME/.cargo/env
     - cargo build
-    - cargo build --features mio
+    - cargo build --features mio_06
+    - cargo build --features mio_07
+    - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
     - kldload mqueuefs
-    - cargo test --features mio
-    - cargo test --features mio -- --ignored --test-threads 1
+    - cargo test --all-features --no-fail-fast
+    - cargo test --all-features --no-fail-fast -- --ignored --test-threads 1
     - cargo run --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
@@ -37,11 +39,27 @@ task:
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
     - cargo build
-    - cargo build --features mio
+    - cargo build --features mio_06
   test_script:
-    - cargo test --features mio
-    - cargo test --features mio -- --ignored --test-threads 1
+    - cargo test --features mio_06
     - cargo run --example limits
+  before_cache_script:
+    - rm -rf $HOME/.cargo/registry/index
+
+task:
+  name: Linux amd64 1.39
+  container:
+    image: rust:1.39
+    cpu: 1
+    memory: 1
+  cargo_cache:
+    folder: $HOME/.cargo/registry
+    fingerprint_script: cat Cargo.lock 2> /dev/null || true
+  build_script:
+    - cargo build --features mio_07
+  test_script:
+    - cargo test --features mio_07 --no-fail-fast
+    - cargo test --features mio_07 --no-fail-fast -- --ignored --test-threads 1
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -57,10 +75,14 @@ task:
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
     - cargo build -Z minimal-versions
-    - cargo build -Z minimal-versions --features mio
+    - cargo build -Z minimal-versions --features mio_06
+    - cargo build -Z minimal-versions --features mio_07
+    - cargo build -Z minimal-versions --all-features
   test_script:
     - cargo test -Z minimal-versions
-    - cargo test -Z minimal-versions --features mio
+    - cargo test -Z minimal-versions --features mio_06
+    - cargo test -Z minimal-versions --features mio_07
+    - cargo test -Z minimal-versions --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -80,11 +102,12 @@ task:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
-    - cargo build --target i686-unknown-linux-gnu --features mio
-    - cargo build --target i686-unknown-linux-musl --features mio
+    - cargo build --target i686-unknown-linux-gnu --all-features
+    - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
-    - cargo test --target i686-unknown-linux-gnu --features mio
-    - cargo test --target i686-unknown-linux-musl --features mio
+    - cargo test --target i686-unknown-linux-gnu --all-features
+    - cargo test --target i686-unknown-linux-musl --all-features
+    - cargo run --example limits
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 
@@ -105,10 +128,11 @@ task:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
-    - cargo clippy --features mio
-    - cargo check --target x86_64-unknown-netbsd --features mio --tests
-    - cargo check --target x86_64-sun-solaris --tests
-    - cargo check --target x86_64-unknown-linux-gnux32 --features mio --tests
-    - cargo check --target aarch64-unknown-linux-gnu --features mio --tests
+    - cargo clippy
+    - cargo clippy --all-features
+    - cargo check --target x86_64-unknown-netbsd --tests --examples --all-features
+    - cargo check --target x86_64-sun-solaris --tests --examples
+    - cargo check --target x86_64-unknown-linux-gnux32 --tests --examples --all-features
+    - cargo check --target aarch64-unknown-linux-gnu --tests --examples --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
