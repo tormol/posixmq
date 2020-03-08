@@ -224,6 +224,7 @@
 // `SystemTime` instead of custom types.
 
 #![allow(clippy::needless_return, clippy::redundant_closure, clippy::needless_lifetimes)] // style
+#![allow(clippy::range_plus_one)] // edge case: I think 1..x+1 is clearer than 1..=x
 #![allow(clippy::cast_lossless)] // improves portability when values are limited by the OS anyway
 // feel free to disable more lints
 
@@ -442,7 +443,7 @@ impl OpenOptions {
     /// * Possibly other
     pub fn open<N: AsRef<[u8]> + ?Sized>(&self,  name: &N) -> Result<PosixMq, io::Error> {
         pub fn open_slice(opts: &OpenOptions,  name: &[u8]) -> Result<PosixMq, io::Error> {
-            with_name_as_cstr(name.as_ref(), |name| opts.open_c(&name) )
+            with_name_as_cstr(name, |name| opts.open_c(&name) )
         }
         open_slice(self, name.as_ref())
     }
