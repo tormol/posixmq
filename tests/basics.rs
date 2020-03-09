@@ -6,12 +6,6 @@ extern crate posixmq;
 use posixmq::{PosixMq, OpenOptions, Attributes, unlink};
 
 #[test]
-fn name_with_nul() {
-    assert_eq!(unlink("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("/foo\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-}
-
-#[test]
 fn nonexistant() {
     let _ = unlink(b"/404"); // in case it already exists
     assert_eq!(unlink("/404").unwrap_err().kind(), ErrorKind::NotFound);
