@@ -144,7 +144,7 @@ fn long() {
 
 #[test]
 fn edge_between_short_and_long() {
-    for len_with_slash in 25..=40 {
+    for len_with_slash in 40..=52 {
         let mut name = String::from("/name_");
         name.extend((b'A'..=b'Z').take(len_with_slash-6).map(|c| c as char ));
         test_normalization(&name);

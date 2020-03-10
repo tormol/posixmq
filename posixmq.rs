@@ -263,7 +263,7 @@ extern crate mio_07;
 use mio_07::{event::Source, unix::SourceFd, Registry, Interest};
 
 
-const CSTR_BUF_SIZE: usize = 32;
+const CSTR_BUF_SIZE: usize = 48;
 fn with_name_as_cstr<F: FnOnce(&CStr)->Result<R,io::Error>, R>(mut name: &[u8],  f: F)
 -> Result<R,io::Error> {
     if name.first() == Some(&b'/') {
