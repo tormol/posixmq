@@ -229,7 +229,7 @@
 // feel free to disable more lints
 
 use std::{io, mem, ptr};
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
@@ -263,32 +263,27 @@ extern crate mio_07;
 use mio_07::{event::Source, unix::SourceFd, Registry, Interest};
 
 
-/// Internal helper for converting to C string and prepending '/' when missing.
-fn name_to_cstring(name: &[u8]) -> Result<CString, io::Error> {
-    let mut buf = Vec::with_capacity(name.len()+2);
-    if name.first() != Some(&b'/') {
-        buf.push(b'/');
-    }
-    buf.extend_from_slice(name);
-    CString::new(buf).map_err(|err| io::Error::from(err) )
-}
-
 const CSTR_BUF_SIZE: usize = 32;
 fn with_name_as_cstr<F: FnOnce(&CStr)->Result<R,io::Error>, R>(mut name: &[u8],  f: F)
 -> Result<R,io::Error> {
     if name.first() == Some(&b'/') {
         name = &name[1..];
     }
-    if name.len() > CSTR_BUF_SIZE - 2 {
-        name_to_cstring(name).and_then(|longbuf| f(&longbuf) )
+    let mut longbuf: Box<[u8]>;
+    let mut shortbuf: [u8; CSTR_BUF_SIZE];
+    let c_bytes = if name.len() + 2 <= CSTR_BUF_SIZE {
+        shortbuf = [0; CSTR_BUF_SIZE];
+        &mut shortbuf[..name.len()+2]
     } else {
-        let mut shortbuf = [0; CSTR_BUF_SIZE];
-        shortbuf[0] = b'/';
-        shortbuf[1..name.len()+1].copy_from_slice(name);
-        match CStr::from_bytes_with_nul(&shortbuf[..name.len()+2]) {
-            Ok(name) => f(name),
-            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "contains nul byte"))
-        }
+        longbuf = vec![0; name.len()+2].into_boxed_slice();
+        &mut longbuf
+    };
+    c_bytes[0] = b'/';
+    c_bytes[1..name.len()+1].copy_from_slice(name);
+
+    match CStr::from_bytes_with_nul(c_bytes) {
+        Ok(name) => f(name),
+        Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "contains nul byte"))
     }
 }
 
