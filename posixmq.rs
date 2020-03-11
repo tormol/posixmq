@@ -553,7 +553,7 @@ type KernelLong = c_long;
 /// Contains information about the capacities and state of a posix message queue.
 ///
 /// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
-#[derive(Clone,Copy, PartialEq,Eq, Debug)]
+#[derive(Clone,Copy, PartialEq,Eq)]
 pub struct Attributes {
     /// The maximum size of messages that can be stored in the queue.
     pub max_msg_len: usize,
@@ -565,6 +565,30 @@ pub struct Attributes {
     /// Whether the descriptor was set to nonblocking mode when
     /// the attributes were retrieved.
     pub nonblocking: bool,
+    _private: ()
+}
+
+impl Default for Attributes {
+    fn default() -> Self {
+        Attributes {
+            max_msg_len: 0,
+            capacity: 0,
+            current_messages: 0,
+            nonblocking: true,
+            _private: ()
+        }
+    }
+}
+
+impl Debug for Attributes {
+    fn fmt(&self,  fmtr: &mut fmt::Formatter) -> fmt::Result {
+        fmtr.debug_struct("Attributes")
+            .field("max_msg_len", &self.max_msg_len)
+            .field("capacity", &self.capacity)
+            .field("current_messages", &self.current_messages)
+            .field("nonblocking", &self.nonblocking)
+            .finish()
+    }
 }
 
 
@@ -861,15 +885,15 @@ impl PosixMq {
     /// (Which also means they won't block.)
     pub fn attributes(&self) -> Attributes {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
-        let ret = unsafe { mq_getattr(self.mqd, &mut attrs) };
-        if ret == -1 {
-            Attributes { max_msg_len: 0,  capacity: 0,  current_messages: 0,  nonblocking: true }
+        if unsafe { mq_getattr(self.mqd, &mut attrs) } == -1{
+            Attributes::default()
         } else {
             Attributes {
                 max_msg_len: attrs.mq_msgsize as usize,
                 capacity: attrs.mq_maxmsg as usize,
                 current_messages: attrs.mq_curmsgs as usize,
                 nonblocking: (attrs.mq_flags & (O_NONBLOCK as KernelLong)) != 0,
+                _private: ()
             }
         }
     }

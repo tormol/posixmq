@@ -3,7 +3,7 @@
 use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, Attributes, unlink};
+use posixmq::{PosixMq, OpenOptions, unlink};
 
 #[test]
 fn nonexistant() {
@@ -14,19 +14,18 @@ fn nonexistant() {
 
 #[test]
 fn open_custom_capacities() {
-    let mq = OpenOptions::readonly()
+    let attrs = OpenOptions::readonly()
         .capacity(2)
         .max_msg_len(100)
-        .create()
+        .create_new()
         .open(b"/custom_capacities")
-        .unwrap();
+        .expect("create new /custom_capacities")
+        .attributes();
     let _ = posixmq::unlink(b"/custom_capacities");
-    assert_eq!(mq.attributes(), Attributes {
-        capacity: 2,
-        max_msg_len: 100,
-        current_messages: 0,
-        nonblocking: false,
-    });
+    assert_eq!(attrs.capacity, 2);
+    assert_eq!(attrs.max_msg_len, 100);
+    assert_eq!(attrs.current_messages, 0);
+    assert!(!attrs.nonblocking);
 }
 
 #[test]
