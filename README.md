@@ -16,8 +16,8 @@ loop {
 
 ## Supported operating systems
 
-posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly and OmniOS, but not all features are available everywhere. See rustdoc for details.  
-***macOS, OpenBSD and Windows doesn't have posix message queues**, and this crate will fail to compile there.
+posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly BSD and OmniOSce, but not all features are available everywhere. See rustdoc for details.  
+***macOS, OpenBSD, Android and Windows doesn't have posix message queues**, and this crate will fail to compile there.
 
 ## optional mio integration
 
@@ -36,7 +36,7 @@ Also remember to open the message queues in nonblocking mode.
 
 * `send()` and `recv()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
 * Supports deadlines / timeouts.
-* Optionally integrates with `mio`.
+* Optionally integrates with Mio.
 * Is dual-licensed Apache-2.0 and MIT instead of only MIT.
 
 ## Minimum supported Rust version

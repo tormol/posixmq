@@ -122,31 +122,33 @@
 //!
 //! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFly | Illumos | Solaris
 //! -|-|-|-|-|-|-
-//! core features | Yes | Yes | Yes | Yes | Yes | Yes | Yes
-//! mio `Source` | Yes | Yes | unusable | Yes | No | No | No
-//! `FromRawFd`+`IntoRawFd`+`try_clone()` | Yes | No | Yes | Yes | No | No
-//! `AsRawFd`+`set_cloexec()` | Yes | Yes | Yes | Yes | No | No
-//! Tested? | Yes, CI | Yes, CI | Manually | Manually | Manually | Cross-`check`ed on CI
+//! core features | Yes | Yes | Yes | Yes | Yes | Yes
+//! mio `Source` & `Evented` | Yes | Yes | unusable | Yes | No | No
+//! `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone) | Yes | No | Yes | Yes | No | No
+//! `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec) | Yes | Yes | Yes | Yes | No | No
+//! Tested? | Manually+CI | Manually+CI | Manually | Manually | Manually (on OmniOSce) | Cross-`check`ed on CI
 //!
 //! This library will fail to compile if the target OS doesn't have posix
 //! message queues.
 //!
 //! Feature explanations:
 //!
-//! * `FromRawFd+IntoRawFd`+`try_clone()`: For this to work, the inner `mqd_t`
-//!   type must be an `int` typedef, and bad things might happen if it doesn't
-//!   represent a file descriptor. These impls are currently on by default and
-//!   only disabled when known not to work.
-//! * `AsRawFd`+`set_cloexec()`: similar to `FromRawFd` and `IntoRawFd`, but
-//!   FreeBSD 11+ has [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
+//! * `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone):
+//!   For theese to work, the inner `mqd_t` type must be an `int`/`RawFd` typedef,
+//!   and known to represent a file descriptor.  
+//!   These impls are currently provided by default and only disabled
+//!   when known not to work.
+//! * `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec):
+//!   Similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
 //!   which lets one get a file descriptor from a `mqd_t`.  
 //!   Changing or querying close-on-exec requires `AsRawFd`. `is_cloexec()` is
 //!   always present and returns `true` on OSes where cloexec cannot be
 //!   disabled. (posix message queue descriptors should have close-on-exec set
 //!   by default).
-//! * mio `Source`: The impl requires both `AsRawFd` and that mio compiless.
+//! * mio `Source` & `Evented`: The impls require both `AsRawFd`
+//!   and that mio compiles on the OS.
 //!   This does not guarantee that the event notification mechanism used by mio
-//!   supports posix message queues though.
+//!   supports posix message queues though. (registering fails on NetBSD)
 //!
 //! On Linux, message queues and their permissions can be viewed in
 //! `/dev/mqueue/`. The kernel *can* be compiled to not support posix message
@@ -155,7 +157,7 @@
 //! On FreeBSD, the kernel module responsible for posix message queues
 //! is not loaded by default; Run `kldload mqueuefs` as root to enable it.
 //! To list queues, the file system must additionally be mounted first:
-//! `mount -t mqueuefs null $somewhere`.
+//! `mount -t mqueuefs null $somewhere`.  
 //! Versions before 11 do not have the function used to get a file descriptor,
 //! so this library will not compile there.
 //!
@@ -191,34 +193,37 @@
 //!
 //! # Differences from the C API
 //!
-//! * `send()` and `recv()` tries again when EINTR / `ErrorKind::Interrupted`
-//!   is returned. (Consistent with normal Rust io)
-//! * `open()` and all other methods which take `AsRef<[u8]>` prepends '/' to
-//!   the name if missing. (They allocate anyway, to append a terminating '\0')
+//! * [`send()`](struct.PosixMq.html#method.send),
+//!   [`recv()`](struct.PosixMq.html#method.recv) and the timed equivalents
+//!   tries again when EINTR / `ErrorKind::Interrupted` is returned.
+//!   (Consistent with how std does IO)
+//! * `open()` and all other methods which take `AsRef<[u8]>` prepends `'/'` to
+//!   the name if missing.
+//!   (They have to copy the name anyway, to append a terminating `'\0'`)
+//!   Use [`open_c()`](struct.OpenOptions.html#method.open_c) and
+//!   [`unlink_c()`](fn.unlink_c.html) if you need to interact with queues on
+//!   NetBSD or DragonFly that doesn't have a leading `'/'`.
 //!
 //! # Minimum supported Rust version
 //!
-//! The minimum supported Rust version for 1.0.z releases is 1.31.1.  
+//! The minimum supported Rust version for posixmq 1.0.z releases is 1.31.1.  
 //! Later 1.y.0 releases might increase this. Until rustup has builds for
 //! DragonFly and Illumos, the minimum version will not be increased past what
 //! is available in repositories for these operating systems.
 //!
-//! # Possible additional features that haven't been implemented yet
+//! # Possible future features
 //!
+//! * Struct that unlinks a message queue when dropped
 //! * Listing queues and their owners using OS-specific interfaces
 //!   (such as /dev/mqueue/ on Linux)
+//! * `tmpfile()` equivalent
 //! * Querying and possibly changing limits and default values
-//! * Struct that deletes the message queue when dropped
-//! * tmpfile equivalent
-//! * Test more platforms on CI
-//! * `mq_notify()`?
-//!
-//! Please open an issue if you want any of them.
+//! * Expose `mq_notify()`?
 
 // # Why this crate requires `std`
 //
 // The libc crate doesn't expose `errno` in a portable way,
-// so `std::io::Error::last_err()` is required to give errors
+// so `std::io::Error::last_os_error()` is required to give errors
 // more specific than "something went wrong".
 // Depending on std also means that functions can use `io::Error` and
 // `SystemTime` instead of custom types.
@@ -679,10 +684,13 @@ fn timeout_to_realtime(timeout: Duration) -> Result<timespec, io::Error> {
 
 /// A descriptor for an open posix message queue.
 ///
-/// Message queues can sent to and / or received from depending on the options
-/// it was opened with.
+/// Message queues can be sent to and / or received from depending on the
+/// options it was opened with.
 ///
 /// The descriptor is closed when this struct is dropped.
+///
+/// See [the documentation in the crate root](index.html) for examples,
+/// portability notes and OS details.
 pub struct PosixMq {
     mqd: mqd_t
 }
@@ -745,8 +753,8 @@ impl PosixMq {
         Ok((priority as u32, len as usize))
     }
 
-    /// Returns an `Iterator` which calls `recv()` repeatedly with an
-    /// appropriately sized buffer.
+    /// Returns an `Iterator` which calls [`recv()`](#method.recv) repeatedly
+    /// with an appropriately sized buffer.
     ///
     /// If the message queue is opened in non-blocking mode the iterator can be
     /// used to drain the queue. Otherwise it will block and never end.
@@ -879,13 +887,15 @@ impl PosixMq {
     /// zero and `nonblocking` is set to `true`.
     ///
     /// The rationale for swallowing these errors is that they're only caused
-    /// by buggy code (incorrect usage of `from_raw_fd()` or similar),
+    /// by buggy code (incorrect usage of [`from_raw_fd()`](#method.from_raw_fd)
+    //   or similar),
     /// and not having to `.unwrap()` makes the function nicer to use.  
-    /// Future `send()` and `recv()` will reveal the bug when they also fail.
+    /// Future [`send()`](#method.send) and [`recv()`](#method.recv)
+    //  will reveal the bug when they also fail.
     /// (Which also means they won't block.)
     pub fn attributes(&self) -> Attributes {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
-        if unsafe { mq_getattr(self.mqd, &mut attrs) } == -1{
+        if unsafe { mq_getattr(self.mqd, &mut attrs) } == -1 {
             Attributes::default()
         } else {
             Attributes {
@@ -950,9 +960,10 @@ impl PosixMq {
     /// Check whether this descriptor will be closed if the process `exec`s
     /// into another program.
     ///
-    /// Posix message queues are closed on exec by default, but this can be
-    /// changed with `set_cloexec()`. On operating systems where that function
-    /// is not available, this function unconditionally returns `true`.
+    /// Posix message queues are closed on exec by default,
+    /// but this can be changed with [`set_cloexec()`](#method.set_cloexec).
+    /// On operating systems where that function is not available,
+    /// this function unconditionally returns `true`.
     ///
     /// # Errors
     ///
@@ -1003,8 +1014,8 @@ impl PosixMq {
     ///
     /// # Safety
     ///
-    /// On some operating systems `mqd_t` is a pointer, so the safety of most
-    /// other methods then depend on it being correct.
+    /// On some operating systems `mqd_t` is a pointer, which means that the
+    /// safety of most other methods depend on it being correct.
     pub unsafe fn from_raw_mqd(mqd: mqd_t) -> Self {
         PosixMq{mqd}
     }
@@ -1013,8 +1024,8 @@ impl PosixMq {
     ///
     /// This function should only be used for passing to ffi code or to access
     /// portable features not exposed by this wrapper (such as calling
-    /// `mq_notify()` or handling EINTR / `ErrorKind::Interrupted` when sending
-    /// or receiving).
+    /// `mq_notify()` or not automatically retrying on EINTR /
+    /// `ErrorKind::Interrupted` when sending or receiving).
     ///
     /// If you need a file descriptor, use `as_raw_fd()` instead for increased
     /// portability.
@@ -1198,7 +1209,13 @@ impl Evented for PosixMq {
 /// posixmq = {version="0.2", features=["mio_07"]}
 /// ```
 ///
-/// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
+/// Due to a [long-lived bug in cargo]() this will currently enable
+/// the os_reactor feature of mio. This is not intended, and can change in the
+/// future.
+///
+/// You probably want to make the queue non-blocking: Either use
+/// [`OpenOptions.noblocking()`](struct.OpenOptions.html#method.nonblocking)
+/// when preparing to open the queue, or call [`set_nonblocking(true)`](struct.PosixMq.html#method.set_nonblocking).
 #[cfg(feature="mio_07")]
 impl Source for &PosixMq {
     fn register(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
@@ -1236,12 +1253,13 @@ impl Source for PosixMq {
 
 /// An `Iterator` that calls [`recv()`](struct.PosixMq.html#method.recv) on a borrowed [`PosixMq`](struct.PosixMq.html).
 ///
-/// Iteration ends when a `recv()` fails with a `WouldBlock` error, but is
-/// infinite if the descriptor is opened in blocking mode.
+/// Iteration ends when a `recv()` fails with an `ErrorKind::WouldBlock` error,
+/// but is infinite if the descriptor is in blocking mode.
 ///
 /// # Panics
 ///
-/// `next()` can panic if an error other than `ErrorKind::WouldBlock` is produced.
+/// `next()` will panic if an error of type other than `ErrorKind::WouldBlock`
+/// or `ErrorKind::Interrupted` occurs.
 #[derive(Clone)]
 pub struct Iter<'a> {
     mq: &'a PosixMq,
@@ -1267,12 +1285,13 @@ impl<'a> Iterator for Iter<'a> {
 /// An `Iterator` that [`recv()`](struct.PosixMq.html#method.recv)s
 /// messages from an owned [`PosixMq`](struct.PosixMq.html).
 ///
-/// Iteration ends when a `recv()` fails with a `WouldBlock` error, but is
-/// infinite if the descriptor is opened in blocking mode.
+/// Iteration ends when a `recv()` fails with an `ErrorKind::WouldBlock` error,
+/// but is infinite if the descriptor is in blocking mode.
 ///
 /// # Panics
 ///
-/// `next()` can panic if an error of type other than `WouldBlock` is produced.
+/// `next()` will panic if an error of type other than `ErrorKind::WouldBlock`
+/// or `ErrorKind::Interrupted` occurs.
 pub struct IntoIter {
     mq: PosixMq,
     max_msg_len: usize,
