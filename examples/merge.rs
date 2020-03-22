@@ -2,10 +2,8 @@
 //! asynchronously.
 
 extern crate posixmq;
-#[cfg(feature="mio_07")]
 extern crate mio_07 as mio;
 
-#[cfg(feature="mio_07")]
 fn main() {
     use std::env::args;
     use std::io::ErrorKind;
@@ -77,10 +75,4 @@ fn main() {
             let _ = unsent.pop();
         }
     }
-}
-
-// to make the example compile when checked as part of `cargo test`
-#[cfg(not(feature="mio_07"))]
-fn main() {
-    panic!("This example require --features mio_07")
 }

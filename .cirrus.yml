@@ -74,15 +74,15 @@ task:
     folder: $HOME/.cargo/registry
     fingerprint_script: cat Cargo.lock 2> /dev/null || true
   build_script:
-    - cargo build -Z minimal-versions
-    - cargo build -Z minimal-versions --features mio_06
-    - cargo build -Z minimal-versions --features mio_07
-    - cargo build -Z minimal-versions --all-features
+    - cargo build -Zfeatures=all -Zminimal-versions
+    - cargo build -Zfeatures=all -Zminimal-versions --features mio_06
+    - cargo build -Zfeatures=all -Zminimal-versions --features mio_07
+    - cargo build -Zfeatures=all -Zminimal-versions --all-features
   test_script:
-    - cargo test -Z minimal-versions
-    - cargo test -Z minimal-versions --features mio_06
-    - cargo test -Z minimal-versions --features mio_07
-    - cargo test -Z minimal-versions --all-features
+    - cargo test -Zfeatures=all -Zminimal-versions
+    - cargo test -Zfeatures=all -Zminimal-versions --features mio_06
+    - cargo test -Zfeatures=all -Zminimal-versions --features mio_07
+    - cargo test -Zfeatures=all -Zminimal-versions --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
 

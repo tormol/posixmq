@@ -27,8 +27,12 @@ Enable the feature for the mio version you use in Cargo.toml with for example:
 
 ```toml
 [dependencies]
+mio = {version="0.7", features=["os-poll"]}
 posixmq = {version="0.2", features=["mio_07"]}
 ```
+
+Because of [Cargo bug #4866](https://github.com/rust-lang/cargo/issue/4866) posixmq unintentionally enables the `os-poll` feature of Mio 0.7.  
+This will hopefully change, so please enable the feature yourself as show above even if your program will complile without it at the moment. [`cargo -Zfeatures=all`](https://doc.rust-lang.org/nightly/cargo/reference/unstable.html#features) can be used to check that one doesn't accidentally depends on some feature.
 
 Also remember to open the message queues in nonblocking mode.
 

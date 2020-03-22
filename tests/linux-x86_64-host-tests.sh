@@ -1,11 +1,12 @@
 #!/bin/sh
 # Run tests on multiple sub-architectures and Rust versions,
 # and check other OSes and architectures
-set -e
+set -e -x
 export RUST_BACKTRACE=1
 
 rm Cargo.lock 2> /dev/null || true
-cargo +nightly test -Z minimal-versions --all-features --no-fail-fast -- --quiet
+cargo +nightly check -Zfeatures=all -Zminimal-versions --all-features
+cargo +nightly test -Zfeatures=all -Zminimal-versions --all-features --no-fail-fast -- --quiet
 rm Cargo.lock
 cargo +1.31.1 test --features mio_06 --no-fail-fast -- --quiet
 cargo +1.31.1 test --features mio_06 -- --ignored --test-threads 1 --quiet
