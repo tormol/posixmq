@@ -1,2 +1,18 @@
+# binaries (must be first)
+/*
+!*/
+!*.*
+
+# Cargo artifacts
 /target/
 /Cargo.lock
+
+# C compiler artifacts (just in case)
+*.o
+*.d
+
+# backups
+*~
+*.tmp
+*.bk
+*.bak
