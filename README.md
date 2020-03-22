@@ -21,7 +21,7 @@ posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly BSD and Omn
 
 ## optional mio integration
 
-On Linux, FreeBSD and DragonFly posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/tokio-rs/mio).
+On Linux, FreeBSD and DragonFly BSD, posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/tokio-rs/mio).
 Both mio version 0.6 and 0.7 are supported, through the opt-in crate features `mio_06` and `mio_07`.
 Enable the feature for the mio version you use in Cargo.toml with for example:
 

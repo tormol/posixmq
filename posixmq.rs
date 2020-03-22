@@ -120,13 +120,13 @@
 //!
 //! ## Compatible operating systems and features
 //!
-//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFly | Illumos | Solaris
-//! -|-|-|-|-|-|-
-//! core features | Yes | Yes | Yes | Yes | Yes | Yes
-//! mio `Source` & `Evented` | Yes | Yes | unusable | Yes | No | No
-//! `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone) | Yes | No | Yes | Yes | No | No
-//! `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec) | Yes | Yes | Yes | Yes | No | No
-//! Tested? | Manually+CI | Manually+CI | Manually | Manually | Manually (on OmniOSce) | Cross-`check`ed on CI
+//! &nbsp; | Linux | FreeBSD 11+ | NetBSD | DragonFly BSD | Illumos | Solaris | VxWorks
+//! -|-|-|-|-|-|-|-
+//! core features | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes
+//! mio `Source` & `Evented` | Yes | Yes | unusable | Yes | No | No | No
+//! `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone) | Yes | No | Yes | Yes | No | No | No
+//! `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec) | Yes | Yes | Yes | Yes | No | No | No
+//! Tested? | Manually+CI | Manually+CI | Manually | Manually | Manually (on OmniOSce) | Cross-`check`ed on CI | No
 //!
 //! This library will fail to compile if the target OS doesn't have posix
 //! message queues.
@@ -136,15 +136,18 @@
 //! * `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone):
 //!   For theese to work, the inner `mqd_t` type must be an `int`/`RawFd` typedef,
 //!   and known to represent a file descriptor.  
-//!   These impls are currently provided by default and only disabled
-//!   when known not to work.
+//!   These impls are only available on OSes where this is known to be the case,
+//!   to increase the likelyhood that the core features will compile on an
+//!   unknown OS.
 //! * `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec):
 //!   Similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
 //!   which lets one get a file descriptor from a `mqd_t`.  
-//!   Changing or querying close-on-exec requires `AsRawFd`. `is_cloexec()` is
-//!   always present and returns `true` on OSes where cloexec cannot be
-//!   disabled. (posix message queue descriptors should have close-on-exec set
-//!   by default).
+//!   Changing or querying close-on-exec requires `AsRawFd`, and is only 
+//!   only meaningful on operating systems that have the concept of `exec()`.  
+//!   [`is_cloexec()`](struct.PosixMq.html#method.is_cloexec) is always present
+//!   and returns `true` on OSes where close-on-exec cannot be disabled or one
+//!   cannot `exec()`. (posix message queue descriptors should have
+//!   close-on-exec set by default).
 //! * mio `Source` & `Evented`: The impls require both `AsRawFd`
 //!   and that mio compiles on the OS.
 //!   This does not guarantee that the event notification mechanism used by mio
@@ -169,14 +172,15 @@
 //! is a race condition with other threads exec'ing before this library can
 //! enable close-on-exec for the descriptor.
 //!
-//! DragonFly doesn't set cloexec when opening either, but does when cloning.
+//! DragonFly BSD doesn't set cloexec when opening either, but does when
+//! cloning.
 //!
 //! ## OS-dependent restrictions and default values
 //!
 //! Not even limiting oneself to the core features is enough to guarantee
 //! portability!
 //!
-//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFly | Illumos
+//! &nbsp; | Linux | FreeBSD | NetBSD | DragonFly BSD | Illumos
 //! -|-|-|-|-|-
 //! max priority | 32767 | 63 | **31** | 31 | 31
 //! default capacity | 10 | 10 | 32 | 32 | 128
@@ -208,8 +212,8 @@
 //!
 //! The minimum supported Rust version for posixmq 1.0.z releases is 1.31.1.  
 //! Later 1.y.0 releases might increase this. Until rustup has builds for
-//! DragonFly and Illumos, the minimum version will not be increased past what
-//! is available in repositories for these operating systems.
+//! DragonFly BSD and Illumos, the minimum version will not be increased past
+//! what is available in the repositories for those operating systems.
 //!
 //! # Possible future features
 //!
@@ -237,9 +241,12 @@ use std::{io, mem, ptr};
 use std::ffi::CStr;
 use std::io::ErrorKind;
 use std::fmt::{self, Debug, Formatter};
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
+#[cfg(any(
+    target_os="linux", target_os="freebsd",
+    target_os="netbsd", target_os="dragonfly",
+))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::time::{Duration, SystemTime};
 
@@ -253,9 +260,12 @@ use libc::{timespec, time_t, mq_timedsend, mq_timedreceive};
 #[cfg(target_os="freebsd")]
 use libc::mq_getfd_np;
 use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NONBLOCK};
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
-use libc::{fcntl, ioctl, F_GETFD, FD_CLOEXEC, FIOCLEX, FIONCLEX};
-#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+#[cfg(any(
+    target_os="linux", target_os="freebsd",
+    target_os="netbsd", target_os="dragonfly",
+))]
+use libc::{fcntl, F_GETFD, FD_CLOEXEC, ioctl, FIOCLEX, FIONCLEX};
+#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
 use libc::F_DUPFD_CLOEXEC;
 
 #[cfg(feature="mio_06")]
@@ -490,7 +500,7 @@ impl OpenOptions {
         }
         let mq = PosixMq{mqd};
 
-        // NetBSD and DragonFly doesn't set cloexec by default and
+        // NetBSD and DragonFly BSD doesn't set cloexec by default and
         // ignores O_CLOEXEC. Setting it with FIOCLEX works though.
         // Propagate error if setting cloexec somehow fails, even though
         // close-on-exec won't matter in most cases.
@@ -944,13 +954,14 @@ impl PosixMq {
     /// The new descriptor will have close-on-exec set.
     ///
     /// This function is not available on FreeBSD, Illumos or Solaris.
-    #[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+    #[cfg(any(target_os="linux", target_os="dragonfly", target_os="netbsd"))]
     pub fn try_clone(&self) -> Result<Self, io::Error> {
         let mq = match unsafe { fcntl(self.mqd, F_DUPFD_CLOEXEC, 0) } {
             -1 => return Err(io::Error::last_os_error()),
             fd => PosixMq{mqd: fd},
         };
-        // NetBSD (but not DragonFly) ignores the cloexec part of F_DUPFD_CLOEXEC
+        // NetBSD ignores the cloexec part of F_DUPFD_CLOEXEC
+        // (but DragonFly BSD respects it here)
         #[cfg(target_os="netbsd")]
         mq.set_cloexec(true)?;
         Ok(mq)
@@ -971,7 +982,10 @@ impl PosixMq {
     /// is already closed. In that case `true` is returned as it will
     /// not be open after `exec`ing either.
     pub fn is_cloexec(&self) -> bool {
-        #[cfg(not(any(target_os="illumos", target_os="solaris")))]
+        #[cfg(any(
+            target_os="linux", target_os="freebsd",
+            target_os="netbsd", target_os="dragonfly",
+        ))]
         {
             let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
             if flags != -1 {
@@ -986,14 +1000,17 @@ impl PosixMq {
     /// It is on by default, so this method should only be called when one
     /// wants the descriptor to remain open afte `exec`ing.
     ///
-    /// This function is not available on Illumos or Solaris.
+    /// This function is not available on Illumos, Solaris or VxWorks.
     ///
     /// # Errors
     ///
     /// This function should only fail if the underlying file descriptor has
     /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
     /// and not reused for something else yet.
-    #[cfg(not(any(target_os="illumos", target_os="solaris")))]
+    #[cfg(any(
+        target_os="linux", target_os="freebsd",
+        target_os="netbsd", target_os="dragonfly",
+    ))]
     pub fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
         let op = if cloexec {FIOCLEX} else {FIONCLEX};
         match unsafe { ioctl(self.as_raw_fd(), op) } {
@@ -1053,10 +1070,13 @@ impl PosixMq {
 /// [`as_raw_mqd()`](struct.PosixMq.html#method.as_raw_mqd)
 /// instead for increased portability.
 ///
-/// This impl is not available on Illumos and Solaris.
-#[cfg(not(any(target_os="illumos", target_os="solaris")))]
+/// This impl is not available on Illumos, Solaris or VxWorks.
+#[cfg(any(
+    target_os="linux", target_os="freebsd",
+    target_os="netbsd", target_os="dragonfly",
+))]
 impl AsRawFd for PosixMq {
-    // On Linux, NetBSD and DragonFly, `mqd_t` is a plain file descriptor
+    // On Linux, NetBSD and DragonFly BSD, `mqd_t` is a plain file descriptor
     // and can trivially be convverted, but this is not guaranteed, nor the
     // case on FreeBSD, Illumos and Solaris.
     #[cfg(not(target_os="freebsd"))]
@@ -1080,7 +1100,7 @@ impl AsRawFd for PosixMq {
 /// `mqd_t` in a portable fashion (from FFI code or by calling `mq_open()`
 /// yourself for some reason), use
 /// [`from_raw_mqd()`](struct.PosixMq.html#method.from_raw_mqd) instead.
-#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         PosixMq{mqd: fd}
@@ -1093,7 +1113,7 @@ impl FromRawFd for PosixMq {
 /// This impl is not available on FreeBSD, Illumos or Solaris. If you need to
 /// transfer ownership to FFI code accepting a `mqd_t`, use
 /// [`into_raw_mqd()`](struct.PosixMq.html#method.into_raw_mqd) instead.
-#[cfg(not(any(target_os="freebsd", target_os="illumos", target_os="solaris")))]
+#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
         let fd = self.mqd;
@@ -1127,21 +1147,20 @@ impl<'a> IntoIterator for &'a PosixMq {
 
 
 impl Debug for PosixMq {
-    // Only show "fd" on operating systems where mqd_t is known to contain one.
-    #[cfg(any(
-        target_os="linux", target_os="freebsd",
-        target_os="netbsd", target_os="dragonfly",
-    ))]
     fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
-        write!(fmtr, "PosixMq{{ fd: {} }}", self.as_raw_fd())
-    }
-
-    #[cfg(not(any(
-        target_os="linux", target_os="freebsd",
-        target_os="netbsd", target_os="dragonfly",
-    )))]
-    fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
-        write!(fmtr, "PosixMq{{}}")
+        let mut representation = fmtr.debug_struct("PosixMq");
+        // display raw value and name unless we know it's a plain fd
+        #[cfg(not(any(
+            target_os="linux", target_os="netbsd", target_os="dragonfly",
+        )))]
+        representation.field("mqd", &self.mqd);
+        // show file descriptor where we have one
+        #[cfg(any(
+            target_os="linux", target_os="freebsd",
+            target_os="netbsd", target_os="dragonfly",
+        ))]
+        representation.field("fd", &self.as_raw_fd());
+        return representation.finish();
     }
 }
 
@@ -1166,7 +1185,7 @@ unsafe impl Send for PosixMq {}
 //  src: https://github.com/illumos/illumos-gate/blob/master/usr/src/lib/libc/port/rt/mqueue.c
 // Solaris I assume is equivalent to Illumos, because the Illumos code has
 // barely been modified after the initial source code release.
-// Linux, NetBSD and DragonFly gets Sync auto-implemented because
+// Linux, NetBSD and DragonFly BSD gets Sync auto-implemented because
 // mqd_t is an int.
 #[cfg(any(target_os="freebsd", target_os="illumos", target_os="solaris"))]
 unsafe impl Sync for PosixMq {}

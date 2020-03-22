@@ -129,7 +129,7 @@ fn bad_timeouts() {
 fn negative_deadline() {
     // SystemTime currently has the same range as time_t, so
     // unconvertable values aren't possible.
-    // While Linux and DragonFly rejects pre-epoch values with EINVAL,
+    // While Linux and DragonFly BSD rejects pre-epoch values with EINVAL,
     // other OSes support them.
     let mq = tmp_mq("/negative_deadline");
     let error = if cfg!(any(target_os="linux", target_os="dragonfly")) {
