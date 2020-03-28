@@ -1,6 +1,6 @@
 # posixmq
 
-A Rust library for working with [posix message queues](https://linux.die.net/man/7/mq_overview).
+A Rust library for using [posix message queues](http://man7.org/linux/man-pages/man7/mq_overview.7.html).
 
 [![crates.io](https://img.shields.io/crates/v/posixmq.svg)](https://crates.io/crates/posixmq) [![Build Status](https://api.cirrus-ci.com/github/tormol/posixmq.svg)](https://cirrus-ci.com/github/tormol/posixmq) ![License](https://img.shields.io/crates/l/posixmq.svg) [![Documentation](https://docs.rs/posixmq/badge.svg)](https://docs.rs/posixmq/)
 
@@ -28,7 +28,7 @@ Enable the feature for the mio version you use in Cargo.toml with for example:
 ```toml
 [dependencies]
 mio = {version="0.7", features=["os-poll"]} # you probably need os-poll
-posixmq = {version="0.2", features=["mio_07"]}
+posixmq = {version="1.0", features=["mio_07"]}
 ```
 
 Also remember to open the message queues in nonblocking mode.

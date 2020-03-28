@@ -1,4 +1,5 @@
-/* Copyright 2019, 2020 Torbjørn Birch Moltu
+/* posixmq 1.0.0 - Idiomatic rust library for using posix message queues
+ * Copyright 2019, 2020 Torbjørn Birch Moltu
  *
  * Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
  * http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -13,7 +14,7 @@
 //! additional priority parameter. Queues are not placed in the normal file
 //! system, but uses a separate, flat namespace. Normal file permissions still
 //! apply though.
-//! For a longer introduction, see [`man mq_overview`](https://linux.die.net/man/7/mq_overview)
+//! For a longer introduction, see [`man mq_overview`](http://man7.org/linux/man-pages/man7/mq_overview.7.html)
 //! or [`man mq`](https://www.unix.com/man-page/netbsd/3/mq/).
 //!
 //! They are not all that useful, as only Linux and some BSDs implement them,
@@ -1197,7 +1198,7 @@ unsafe impl Sync for PosixMq {}
 ///
 /// ```toml
 /// [dependencies]
-/// posixmq = {version="0.2", features=["mio_06"]}
+/// posixmq = {version="1.0", features=["mio_06"]}
 /// ```
 ///
 /// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
@@ -1225,7 +1226,7 @@ impl Evented for PosixMq {
 ///
 /// ```toml
 /// [dependencies]
-/// posixmq = {version="0.2", features=["mio_07"]}
+/// posixmq = {version="1.0", features=["mio_07"]}
 /// ```
 ///
 /// Due to a [long-lived bug in cargo]() this will currently enable
