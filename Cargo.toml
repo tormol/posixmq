@@ -17,13 +17,12 @@ libc = "0.2.59"
 mio_06 = {package="mio", version="0.6.14", optional=true}
 # 0.6.13 drags in libc 0.1 when built with -Z minimal-versions
 mio_07 = {package="mio", version="0.7.0", features=["os-util"], optional=true}
-# feature os-poll is implicitly enabled due to cargo bug #4866
+# examples and tests for mio_07 also requires mio feature os-poll,
+# but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
+# instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
 
 [lib]
 path = "posixmq.rs"
-
-[target.'cfg(feature="mio_07")'.dev-dependencies]
-mio_07 = {package="mio", version="0.7.0", features=["os-poll"]}
 
 [[example]]
 name = "merge"
@@ -32,3 +31,4 @@ required-features = ["mio_07"]
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "feature=\"os-poll\""]

@@ -6,10 +6,12 @@ export RUST_BACKTRACE=1
 
 rm Cargo.lock 2> /dev/null || true
 cargo +nightly check -Zfeatures=all -Zminimal-versions --all-features
-cargo +nightly test -Zfeatures=all -Zminimal-versions --all-features --no-fail-fast -- --quiet
+RUSTFLAGS='--cfg feature="os-poll"' cargo +nightly test -Zfeatures=all -Zminimal-versions --all-features --no-fail-fast -- --quiet
 rm Cargo.lock
 cargo +1.31.1 test --features mio_06 --no-fail-fast -- --quiet
 cargo +1.31.1 test --features mio_06 -- --ignored --test-threads 1 --quiet
+cargo +1.39.0 check --features mio_07 # check that crate doesn't use os-poll
+export RUSTFLAGS='--cfg feature="os-poll"'
 cargo +1.39.0 build --features mio_07 --tests --examples
 cargo +1.39.0 test --all-features --no-fail-fast -- --quiet
 cargo +1.39.0 test --all-features -- --ignored --test-threads 1 --quiet

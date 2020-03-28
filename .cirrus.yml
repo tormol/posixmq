@@ -21,6 +21,7 @@ task:
     - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - kldload mqueuefs
     - cargo test --all-features --no-fail-fast
     - cargo test --all-features --no-fail-fast -- --ignored --test-threads 1
@@ -58,6 +59,7 @@ task:
   build_script:
     - cargo build --features mio_07
   test_script:
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test --features mio_07 --no-fail-fast
     - cargo test --features mio_07 --no-fail-fast -- --ignored --test-threads 1
   before_cache_script:
@@ -81,6 +83,7 @@ task:
   test_script:
     - cargo test -Zfeatures=all -Zminimal-versions
     - cargo test -Zfeatures=all -Zminimal-versions --features mio_06
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test -Zfeatures=all -Zminimal-versions --features mio_07
     - cargo test -Zfeatures=all -Zminimal-versions --all-features
   before_cache_script:
@@ -105,6 +108,7 @@ task:
     - cargo build --target i686-unknown-linux-gnu --all-features
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test --target i686-unknown-linux-gnu --all-features
     - cargo test --target i686-unknown-linux-musl --all-features
     - cargo run --example limits
@@ -130,6 +134,7 @@ task:
   build_script:
     - cargo clippy
     - cargo clippy --all-features
+    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo check --target x86_64-unknown-netbsd --tests --examples --all-features
     - cargo check --target x86_64-sun-solaris --tests --examples
     - cargo check --target x86_64-unknown-linux-gnux32 --tests --examples --all-features
