@@ -98,7 +98,7 @@ task:
   allow_failures: false
   setup_script:
     - apt-get update
-    - apt-get install -yqq gcc gcc-6-multilib linux-libc-dev
+    - apt-get install -yqq gcc gcc-multilib linux-libc-dev
     - rustup target add i686-unknown-linux-gnu
     - rustup target add i686-unknown-linux-musl
   cargo_cache:
@@ -119,7 +119,7 @@ task:
   name: Cross-check stable
   container:
     image: rust:latest
-    cpu: 2
+    cpu: 1
     memory: 1
   allow_failures: false
   setup_script:
