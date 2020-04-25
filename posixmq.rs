@@ -899,10 +899,10 @@ impl PosixMq {
     ///
     /// The rationale for swallowing these errors is that they're only caused
     /// by buggy code (incorrect usage of [`from_raw_fd()`](#method.from_raw_fd)
-    //   or similar),
+    ///  or similar),
     /// and not having to `.unwrap()` makes the function nicer to use.  
     /// Future [`send()`](#method.send) and [`recv()`](#method.recv)
-    //  will reveal the bug when they also fail.
+    ///  will reveal the bug when they also fail.
     /// (Which also means they won't block.)
     pub fn attributes(&self) -> Attributes {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
