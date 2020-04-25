@@ -569,7 +569,7 @@ type KernelLong = c_long;
 /// Contains information about the capacities and state of a posix message queue.
 ///
 /// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
-#[derive(Clone,Copy, PartialEq,Eq)]
+#[derive(Clone,Copy, PartialEq,Eq, Default)]
 pub struct Attributes {
     /// The maximum size of messages that can be stored in the queue.
     pub max_msg_len: usize,
@@ -582,18 +582,6 @@ pub struct Attributes {
     /// the attributes were retrieved.
     pub nonblocking: bool,
     _private: ()
-}
-
-impl Default for Attributes {
-    fn default() -> Self {
-        Attributes {
-            max_msg_len: 0,
-            capacity: 0,
-            current_messages: 0,
-            nonblocking: true,
-            _private: ()
-        }
-    }
 }
 
 impl Debug for Attributes {
