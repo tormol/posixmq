@@ -35,7 +35,7 @@ fn main() {
     posixmq::unlink("/default_capacities")
         .expect("Cannot delete posix message queue /default_capacities");
 
-    let attrs = mq.attributes();
+    let attrs = mq.attributes().expect("Cannot get attributes for queue");
     println!("default queue capacity:         {}", attrs.capacity);
     println!("default maximum message length: {}", attrs.max_msg_len);
 

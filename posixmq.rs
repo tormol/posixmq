@@ -49,14 +49,14 @@
 //!
 //! // the receive buffer must be at least as big as the biggest possible
 //! // message, or you will not be allowed to receive anything.
-//! let mut buf = vec![0; mq.attributes().max_msg_len];
+//! let mut buf = vec![0; mq.attributes().unwrap().max_msg_len];
 //! assert_eq!(mq.recv(&mut buf).unwrap(), (10, "Hello,".len()));
 //! assert_eq!(mq.recv(&mut buf).unwrap(), (0, "message".len()));
 //! assert_eq!(mq.recv(&mut buf).unwrap(), (0, "queue".len()));
 //! assert_eq!(&buf[..5], b"queue");
 //!
 //! // check that there are no more messages
-//! assert_eq!(mq.attributes().current_messages, 0);
+//! assert_eq!(mq.attributes().unwrap().current_messages, 0);
 //! // note that acting on this value is race-prone. A better way to do this
 //! // would be to switch our descriptor to non-blocking mode, and check for
 //! // an error of type `ErrorKind::WouldBlock`.
@@ -882,28 +882,68 @@ impl PosixMq {
     ///
     /// Retrieving these attributes should only fail if the underlying
     /// descriptor has been closed or is not a message queue.
-    /// In that case `max_msg_len`, `capacity` and `current_messages` will be
-    /// zero and `nonblocking` is set to `true`.
     ///
-    /// The rationale for swallowing these errors is that they're only caused
-    /// by buggy code (incorrect usage of [`from_raw_fd()`](#method.from_raw_fd)
-    ///  or similar),
-    /// and not having to `.unwrap()` makes the function nicer to use.  
-    /// Future [`send()`](#method.send) and [`recv()`](#method.recv)
-    ///  will reveal the bug when they also fail.
-    /// (Which also means they won't block.)
-    pub fn attributes(&self) -> Attributes {
+    /// On operating systems where the descriptor is a pointer, such as on
+    /// FreeBSD and Illumos, such bugs will enable undefined behavior
+    /// and this call will dereference freed or uninitialized memory.  
+    /// (That doesn't make this function unsafe though -
+    /// [`PosixMq::from_raw_mqd()`](#method.from_raw_mqd) and `mq_close()` are.)
+    ///
+    /// While a `send()` or `recv()` ran in place of this call would also have
+    /// failed immediately and therefore not blocked, The descriptor might have
+    /// become used for another queue when a *later* `send()` or `recv()` is
+    /// performed. The descriptor might then be in blocking mode.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # let _ = posixmq::unlink("/with_custom_capacity");
+    /// let mq = posixmq::OpenOptions::readwrite()
+    ///     .create_new()
+    ///     .max_msg_len(100)
+    ///     .capacity(3)
+    ///     .open("/with_custom_capacity")
+    ///     .expect("create queue");
+    /// let attrs = mq.attributes().expect("get attributes for queue");
+    /// assert_eq!(attrs.max_msg_len, 100);
+    /// assert_eq!(attrs.capacity, 3);
+    /// assert_eq!(attrs.current_messages, 0);
+    /// assert!(!attrs.nonblocking);
+    /// ```
+    ///
+    /// Ignore the error:
+    ///
+    /// (Will only happen with buggy code (incorrect usage of
+    /// [`from_raw_fd()`](#method.from_raw_fd) or similar)).
+    ///
+    #[cfg_attr(
+        any(target_os="linux", target_os="android", target_os="netbsd", target_os="dragonfly"),
+        doc="```"
+    )]
+    #[cfg_attr(
+        not(any(target_os="linux", target_os="android", target_os="netbsd", target_os="dragonfly")),
+        doc="```rust,no_compile"
+    )]
+    /// # use std::os::unix::io::FromRawFd;
+    /// # let bad = unsafe { posixmq::PosixMq::from_raw_fd(-1) };
+    /// let attrs = bad.attributes().unwrap_or_default();
+    /// assert_eq!(attrs.max_msg_len, 0);
+    /// assert_eq!(attrs.capacity, 0);
+    /// assert_eq!(attrs.current_messages, 0);
+    /// assert!(!attrs.nonblocking);
+    /// ```
+    pub fn attributes(&self) -> Result<Attributes, io::Error> {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
         if unsafe { mq_getattr(self.mqd, &mut attrs) } == -1 {
-            Attributes::default()
+            Err(io::Error::last_os_error())
         } else {
-            Attributes {
+            Ok(Attributes {
                 max_msg_len: attrs.mq_msgsize as usize,
                 capacity: attrs.mq_maxmsg as usize,
                 current_messages: attrs.mq_curmsgs as usize,
                 nonblocking: (attrs.mq_flags & (O_NONBLOCK as KernelLong)) != 0,
                 _private: ()
-            }
+            })
         }
     }
 
@@ -911,10 +951,25 @@ impl PosixMq {
     ///
     /// # Errors
     ///
-    /// Returns `true` if retrieving the flag fails,
-    /// see [`attributes()`](struct.PosixMq#method.attributes) for rationale.
-    pub fn is_nonblocking(&self) -> bool {
-        self.attributes().nonblocking
+    /// Should only fail as result of buggy code that either created this
+    /// descriptor from something that is not a queue, or has already closed
+    /// the underlying descriptor.  
+    /// (This function will not silently succeed if the fd points to anything
+    /// other than a queue (for example a socket), as this function
+    /// is a wrapper around [`attributes()`][#method.attributes].)  
+    /// To ignore failure, one can write `.is_nonblocking().unwrap_or(false)`.
+    ///
+    /// ## An error doesn't guarantee that any further [`send()`](#method.send) or [`recv()`](#method.recv) wont block.
+    ///
+    /// While a `send()` or `recv()` ran in place of this call would also have
+    /// failed immediately and therefore not blocked, the descriptor might have
+    /// become used for another queue when a *later* `send()` or `recv()` is
+    /// performed. The descriptor might then be in blocking mode.
+    pub fn is_nonblocking(&self) -> Result<bool, io::Error> {
+        match self.attributes() {
+            Ok(attrs) => Ok(attrs.nonblocking),
+            Err(e) => Err(e),
+        }
     }
 
     /// Enable or disable nonblocking mode for this descriptor.
@@ -1117,7 +1172,10 @@ impl IntoIterator for PosixMq {
     type IntoIter = IntoIter;
     fn into_iter(self) -> IntoIter {
         IntoIter {
-            max_msg_len: self.attributes().max_msg_len,
+            max_msg_len: match self.attributes() {
+                Ok(attrs) => attrs.max_msg_len,
+                Err(_) => 0,
+            },
             mq: self,
         }
     }
@@ -1128,7 +1186,10 @@ impl<'a> IntoIterator for &'a PosixMq {
     type IntoIter = Iter<'a>;
     fn into_iter(self) -> Iter<'a> {
         Iter {
-            max_msg_len: self.attributes().max_msg_len,
+            max_msg_len: match self.attributes() {
+                Ok(attrs) => attrs.max_msg_len,
+                Err(_) => 0,
+            },
             mq: self,
         }
     }

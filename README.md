@@ -6,7 +6,7 @@ A Rust library for using [posix message queues](http://man7.org/linux/man-pages/
 
 ```rust,no_run
 let mq = posixmq::PosixMq::open("/queue").expect("cannot open /queue");
-let mut buf = vec![0; mq.attributes().max_msg_len];
+let mut buf = vec![0; mq.attributes().unwrap_or_default().max_msg_len];
 loop {
     let (priority, len) = mq.recv(&mut buf).expect("recv() failed");
     let msg = std::str::from_utf8(&buf[..len]).expect("not UTF-8");

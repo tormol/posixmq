@@ -20,7 +20,8 @@ fn open_custom_capacities() {
         .create_new()
         .open(b"/custom_capacities")
         .expect("create new /custom_capacities")
-        .attributes();
+        .attributes()
+        .expect("get attributes");
     let _ = posixmq::unlink(b"/custom_capacities");
     assert_eq!(attrs.capacity, 2);
     assert_eq!(attrs.max_msg_len, 100);
@@ -41,7 +42,7 @@ fn create_and_remove() {
 fn is_not_nonblocking() {
     let mq = PosixMq::create("/is_not_nonblocking").unwrap();
     let _ = posixmq::unlink("/is_not_nonblocking");
-    assert!(!mq.is_nonblocking());
+    assert!(!mq.is_nonblocking().expect("get attributes"));
     // TODO test that send and receive blocks?
 }
 
@@ -56,7 +57,7 @@ fn is_nonblocking() {
         .unwrap();
     let _ = posixmq::unlink("/is_nonblocking");
 
-    assert!(mq.is_nonblocking());
+    assert!(mq.is_nonblocking().expect("get attributes"));
     assert_eq!(mq.recv(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.send(5, b"e").unwrap();
     assert_eq!(mq.send(6, b"f").unwrap_err().kind(), ErrorKind::WouldBlock);
@@ -67,10 +68,10 @@ fn change_nonblocking() {
     let mq = PosixMq::create("/change_nonblocking").unwrap();
     let _ = posixmq::unlink("/change_nonblocking");
     mq.set_nonblocking(true).unwrap();
-    assert!(mq.is_nonblocking());
+    assert!(mq.is_nonblocking().unwrap());
     assert_eq!(mq.recv(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.set_nonblocking(false).unwrap();
-    assert!(!mq.is_nonblocking());
+    assert!(!mq.is_nonblocking().unwrap());
 }
 
 

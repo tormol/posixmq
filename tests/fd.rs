@@ -34,7 +34,11 @@ fn try_clone() {
     assert!(b.is_cloexec());
     a.send(0, b"a").expect("original descriptor should not be closed");
     b.send(1, b"b").expect("cloned descriptor is should be usable");
-    assert_eq!(a.attributes().current_messages, 2, "descriptors should point to the same queue");
+    assert_eq!(
+        a.attributes().expect("get attributes for cloned descriptor").current_messages,
+        2,
+        "descriptors should point to the same queue"
+    );
     drop(a);
     b.send(2, b"c").expect("cloned descriptor should work after closing the original");
 }

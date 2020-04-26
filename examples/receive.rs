@@ -31,7 +31,7 @@ fn main() {
     let mq = opts.open(name.as_bytes()).expect("opening failed");
 
     if let Some(Some(timeout)) = timeout {
-        let mut buf = vec![0; mq.attributes().max_msg_len];
+        let mut buf = vec![0; mq.attributes().unwrap_or_default().max_msg_len];
         while let Ok((priority, len)) = mq.recv_timeout(&mut buf, timeout) {
             print!("{:3}\t", priority);
             stdout().write_all(&buf[..len]).expect("writing to stdout failed");
