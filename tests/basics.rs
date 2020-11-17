@@ -3,12 +3,12 @@
 use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, unlink};
+use posixmq::{PosixMq, OpenOptions, remove_queue};
 
 #[test]
 fn nonexistant() {
-    let _ = unlink(b"/404"); // in case it already exists
-    assert_eq!(unlink("/404").unwrap_err().kind(), ErrorKind::NotFound);
+    let _ = remove_queue(b"/404"); // in case it already exists
+    assert_eq!(remove_queue("/404").unwrap_err().kind(), ErrorKind::NotFound);
     assert_eq!(PosixMq::open("/404").unwrap_err().kind(), ErrorKind::NotFound);
 }
 
@@ -22,7 +22,7 @@ fn open_custom_capacities() {
         .expect("create new /custom_capacities")
         .attributes()
         .expect("get attributes");
-    let _ = posixmq::unlink(b"/custom_capacities");
+    let _ = posixmq::remove_queue(b"/custom_capacities");
     assert_eq!(attrs.capacity, 2);
     assert_eq!(attrs.max_msg_len, 100);
     assert_eq!(attrs.current_messages, 0);
@@ -33,7 +33,7 @@ fn open_custom_capacities() {
 fn create_and_remove() {
     let mq = OpenOptions::readwrite().create_new().open("/flash");
     mq.expect("cannot create");
-    unlink("/flash").expect("cannot unlink");
+    remove_queue("/flash").expect("cannot remove queue");
     assert_eq!(PosixMq::open("/flash").unwrap_err().kind(), ErrorKind::NotFound);
 }
 
@@ -41,7 +41,7 @@ fn create_and_remove() {
 #[test]
 fn is_not_nonblocking() {
     let mq = PosixMq::create("/is_not_nonblocking").unwrap();
-    let _ = posixmq::unlink("/is_not_nonblocking");
+    let _ = posixmq::remove_queue("/is_not_nonblocking");
     assert!(!mq.is_nonblocking().expect("get attributes"));
     // TODO test that send and receive blocks?
 }
@@ -55,7 +55,7 @@ fn is_nonblocking() {
         .create()
         .open("/is_nonblocking")
         .unwrap();
-    let _ = posixmq::unlink("/is_nonblocking");
+    let _ = posixmq::remove_queue("/is_nonblocking");
 
     assert!(mq.is_nonblocking().expect("get attributes"));
     assert_eq!(mq.recv(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
@@ -66,7 +66,7 @@ fn is_nonblocking() {
 #[test]
 fn change_nonblocking() {
     let mq = PosixMq::create("/change_nonblocking").unwrap();
-    let _ = posixmq::unlink("/change_nonblocking");
+    let _ = posixmq::remove_queue("/change_nonblocking");
     mq.set_nonblocking(true).unwrap();
     assert!(mq.is_nonblocking().unwrap());
     assert_eq!(mq.recv(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
@@ -77,7 +77,7 @@ fn change_nonblocking() {
 
 #[test]
 fn send_errors() {
-    let _ = unlink("send");
+    let _ = remove_queue("send");
     let nb = OpenOptions::writeonly()
         .nonblocking()
         .create()
@@ -101,7 +101,7 @@ fn send_errors() {
     let ro = OpenOptions::readonly().open("send").unwrap();
     assert_eq!(ro.send(0, b"").unwrap_err().kind(), ErrorKind::Other); // opened read-only
 
-    let _ = unlink("send");
+    let _ = remove_queue("send");
 }
 
 #[test]
@@ -118,13 +118,13 @@ fn recv_errors() {
     let wo = OpenOptions::writeonly().open("receive").unwrap();
     assert_eq!(wo.recv(&mut[0; 2]).unwrap_err().kind(), ErrorKind::Other); // opened write-only
 
-    let _ = unlink("receive");
+    let _ = remove_queue("receive");
 }
 
 #[test]
 fn send_and_receive() {
     let mq = PosixMq::create(b"/send_and_receive").unwrap();
-    let _ = unlink(b"/send_and_receive");
+    let _ = remove_queue(b"/send_and_receive");
 
     mq.send(2, b"aaaa").unwrap();
     mq.send(4, b"bbb").unwrap();
@@ -145,7 +145,7 @@ fn send_and_receive() {
 #[test]
 fn iterators() {
     let mq = OpenOptions::readwrite().nonblocking().create().open("/iterable").unwrap();
-    let _ = posixmq::unlink("/iterable");
+    let _ = posixmq::remove_queue("/iterable");
 
     for n in 0..8 {
         mq.send(n, n.to_string().as_bytes()).unwrap()
@@ -168,7 +168,7 @@ fn iterators() {
 #[should_panic]
 fn iterator_panics_if_writeonly() {
     let mq = OpenOptions::writeonly().create().open("writeonly").unwrap();
-    let _ = unlink("writeonly");
+    let _ = remove_queue("writeonly");
     for (_, _) in mq {
 
     }
@@ -179,7 +179,7 @@ fn iterator_panics_if_writeonly() {
 #[ignore] // racy
 fn drop_closes() {
     let mq = PosixMq::create("/close").unwrap();
-    let _ = unlink("/close");
+    let _ = remove_queue("/close");
     let mqd = mq.as_raw_mqd();
     let fake_clone = unsafe { PosixMq::from_raw_mqd(mqd) };
     // cast to usize because pointers cannot be compared directly
@@ -193,7 +193,7 @@ fn drop_closes() {
 #[test]
 fn into_mqd_doesnt_drop() {
     let mq = PosixMq::create("/raw_mqd").unwrap();
-    let _ = unlink("/raw_mqd");
+    let _ = remove_queue("/raw_mqd");
     unsafe {
         let mqd = mq.into_raw_mqd();
         let mq = PosixMq::from_raw_mqd(mqd);

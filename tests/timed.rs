@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 extern crate posixmq;
-use posixmq::{OpenOptions, PosixMq, unlink};
+use posixmq::{OpenOptions, PosixMq, remove_queue};
 
 /// Create smaller queues to avoid running into the total queues size limit.
 /// Several of the tests also require a capacity of 1.
@@ -17,7 +17,7 @@ fn tmp_mq(name: &str) -> PosixMq {
         .create()
         .open(name)
         .expect(&format!("cannot open or create {}", name));
-    let _ = unlink(name);
+    let _ = remove_queue(name);
     mq
 }
 
@@ -101,7 +101,7 @@ fn ignored_when_nonblocking() {
         .create()
         .open("/deadline_is_now")
         .unwrap();
-    let _ = unlink("/deadline_is_now");
+    let _ = remove_queue("/deadline_is_now");
     let later = SystemTime::now() + Duration::from_secs(60);
     let result = mq.recv_deadline(&mut[0; 64], later);
     assert_eq!(result.unwrap_err().kind(), ErrorKind::WouldBlock);

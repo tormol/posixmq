@@ -45,7 +45,7 @@
 //! let mq = PosixMq::open("/hello_posixmq").unwrap();
 //! // delete the message queue when you don't need to open it again.
 //! // otherwise it will remain until the system is rebooted, consuming
-//! posixmq::unlink("/hello_posixmq").unwrap();
+//! posixmq::remove_queue("/hello_posixmq").unwrap();
 //!
 //! // the receive buffer must be at least as big as the biggest possible
 //! // message, or you will not be allowed to receive anything.
@@ -81,7 +81,7 @@
 //! // send something from another thread (or process)
 //! let sender = thread::spawn(move|| {
 //!     let sender = posixmq::OpenOptions::writeonly().open("/mio").unwrap();
-//!     posixmq::unlink("/mio").unwrap();
+//!     posixmq::remove_queue("/mio").unwrap();
 //!     sender.send(0, b"async").unwrap();
 //! });
 //!
@@ -206,8 +206,8 @@
 //!   the name if missing.
 //!   (They have to copy the name anyway, to append a terminating `'\0'`)
 //!   Use [`open_c()`](struct.OpenOptions.html#method.open_c) and
-//!   [`unlink_c()`](fn.unlink_c.html) if you need to interact with queues on
-//!   NetBSD or DragonFly that doesn't have a leading `'/'`.
+//!   [`remove_queue_c()`](fn.remove_queue_c.html) if you need to interact with
+//!   queues on NetBSD or DragonFly that doesn't have a leading `'/'`.
 //!
 //! # Minimum supported Rust version
 //!
@@ -506,6 +506,11 @@ impl OpenOptions {
 
 /// Delete a posix message queue.
 ///
+/// A `'/'` is prepended to the name if it doesn't start with one already.
+/// (it would have to append a `'\0'` and therefore allocate or copy anyway.)
+///
+/// Processes that have it open will still be able to use it.
+///
 /// # Errors
 ///
 /// * Queue doesn't exist (ENOENT) => `ErrorKind::NotFound`
@@ -515,16 +520,16 @@ impl OpenOptions {
 /// * Name contains '\0' bytes => `ErrorKind::InvalidInput`
 /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
 /// * Possibly other
-pub fn unlink<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
-    fn unlink_slice(name: &[u8]) -> Result<(), io::Error> {
-        with_name_as_cstr(name, |name| unlink_c(&name) )
+pub fn remove_queue<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
+    fn remove_queue_slice(name: &[u8]) -> Result<(), io::Error> {
+        with_name_as_cstr(name, |name| remove_queue_c(&name) )
     }
-    unlink_slice(name.as_ref())
+    remove_queue_slice(name.as_ref())
 }
 
 /// Delete a posix message queue, without inspecting `name` or allocating.
 ///
-/// This can on NetBSD be used to access message queues with names that
+/// This function is on NetBSD necessary to remove queues with names that
 /// doesn't start with a '/'.
 ///
 /// # Errors
@@ -534,11 +539,11 @@ pub fn unlink<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
 /// * Posix message queues are disabled (ENOSYS) => `ErrorKind::Other`
 /// * More than one '/' in name (EACCESS) => `ErrorKind::PermissionDenied`
 /// * Name is empty (EINVAL) => `ErrorKind::InvalidInput`
-/// * Name is invalid (ENOENT, EACCESS or EINVAL) => `ErrorKind::NotFound`,
+/// * Name is invalid (ENOENT, EACCESS or EINVAL) => `ErrorKind::NotFound`
 ///   `ErrorKind::PermissionDenied` or `ErrorKind::InvalidInput`
 /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
 /// * Possibly other
-pub fn unlink_c(name: &CStr) -> Result<(), io::Error> {
+pub fn remove_queue_c(name: &CStr) -> Result<(), io::Error> {
     let name = name.as_ptr();
     let ret = unsafe { mq_unlink(name) };
     if ret != 0 {
@@ -888,7 +893,7 @@ impl PosixMq {
     /// # Examples
     ///
     /// ```
-    /// # let _ = posixmq::unlink("/with_custom_capacity");
+    /// # let _ = posixmq::remove_queue("/with_custom_capacity");
     /// let mq = posixmq::OpenOptions::readwrite()
     ///     .create_new()
     ///     .max_msg_len(100)

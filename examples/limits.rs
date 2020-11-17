@@ -32,7 +32,7 @@ fn main() {
         .create_new()
         .open("/default_capacities")
         .expect("Cannot create new posix message queue /default_capacities");
-    posixmq::unlink("/default_capacities")
+    posixmq::remove_queue("/default_capacities")
         .expect("Cannot delete posix message queue /default_capacities");
 
     let attrs = mq.attributes().expect("Cannot get attributes for queue");
@@ -53,7 +53,7 @@ fn main() {
             .max_msg_len(1)
             .create_new()
             .open("/max_capacity")
-            .map(|_| posixmq::unlink("/max_capacity").unwrap() )
+            .map(|_| posixmq::remove_queue("/max_capacity").unwrap() )
             .is_ok()
     }));
 
@@ -63,7 +63,7 @@ fn main() {
             .capacity(1)
             .create_new()
             .open("/max_length")
-            .map(|_| posixmq::unlink("/max_length").unwrap() )
+            .map(|_| posixmq::remove_queue("/max_length").unwrap() )
             .is_ok()
     }));
 
@@ -73,19 +73,19 @@ fn main() {
             .capacity(equal)
             .create_new()
             .open("/max_equal")
-            .map(|_| posixmq::unlink("/max_equal").unwrap() )
+            .map(|_| posixmq::remove_queue("/max_equal").unwrap() )
             .is_ok()
     }));
 
     println!("allows just \"/\":                {}", {
         let result = posixmq::PosixMq::create("/");
-        let _ = posixmq::unlink("/");
+        let _ = posixmq::remove_queue("/");
         result.is_ok()
     });
     println!("enforces name rules:            {}", {
         let noslash = std::ffi::CStr::from_bytes_with_nul(b"noslash\0").unwrap();
         let result = posixmq::OpenOptions::readwrite().create().open_c(noslash);
-        let _ = posixmq::unlink_c(noslash);
+        let _ = posixmq::remove_queue_c(noslash);
         result.is_err()
     });
 }

@@ -51,5 +51,5 @@ fn main() {
     }
 
     // clean up
-    posixmq::unlink_c(name).expect("deleting queue failed")
+    posixmq::remove_queue_c(name).expect("deleting queue failed")
 }

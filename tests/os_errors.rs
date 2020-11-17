@@ -8,7 +8,7 @@ use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, unlink, unlink_c};
+use posixmq::{PosixMq, OpenOptions, remove_queue, remove_queue_c};
 
 fn cstr(s: &str) -> &CStr {
     CStr::from_bytes_with_nul(s.as_bytes()).expect("_c name must have trailing '\0'")
@@ -16,21 +16,21 @@ fn cstr(s: &str) -> &CStr {
 
 #[test]
 fn name_too_long() {
-    assert_eq!(unlink(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
+    assert_eq!(remove_queue(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
     assert_eq!(PosixMq::create(&vec![b'a'; 1000]).unwrap_err().kind(), ErrorKind::Other);
 }
 
 #[cfg(not(any(target_os="netbsd", target_os="dragonfly")))] // allown any name
 #[test]
-fn unlink_invalid_names() {
-    assert_eq!(unlink("").unwrap_err().kind(), unlink("/").unwrap_err().kind(), "\"\"");
-    let err = unlink("//").unwrap_err().kind();
+fn remove_invalid_names() {
+    assert_eq!(remove_queue("").unwrap_err().kind(), remove_queue("/").unwrap_err().kind(), "\"\"");
+    let err = remove_queue("//").unwrap_err().kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "//");
-    let err = unlink("/foo/bar").unwrap_err().kind();
+    let err = remove_queue("/foo/bar").unwrap_err().kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "/foo/bar");
-    let err = unlink("/foo/").unwrap_err().kind();
+    let err = remove_queue("/foo/").unwrap_err().kind();
     assert!(err == ErrorKind::PermissionDenied  ||  err == ErrorKind::InvalidInput, "/foo/");
-    //assert_eq!(unlink("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
+    //assert_eq!(remove_queue("/root").unwrap_err().kind(), ErrorKind::PermissionDenied, "/root");
 }
 
 #[cfg(not(any(
@@ -40,10 +40,14 @@ fn unlink_invalid_names() {
 #[test]
 fn just_slash() {
     let error = if cfg!(target_os="freebsd") {ErrorKind::InvalidInput} else {ErrorKind::NotFound};
-    assert_eq!(unlink("/").expect_err("unlink /").kind(), error, "unlink /");
+    assert_eq!(remove_queue("/").expect_err("remove /").kind(), error, "remove /");
     assert_eq!(PosixMq::open("/").expect_err("open /").kind(), error, "open /");
     assert_eq!(PosixMq::create("/").expect_err("create /").kind(), error, "create /");
-    assert_eq!(unlink_c(cstr("/\0")).expect_err("unlink_c /").kind(), error, "unlink_c /");
+    assert_eq!(
+        remove_queue_c(cstr("/\0")).expect_err("remove c /").kind(),
+        error,
+        "remove c /"
+    );
     assert_eq!(
         OpenOptions::readonly().create().open_c(cstr("/\0")).expect_err("create_c /").kind(),
         error,
@@ -72,8 +76,8 @@ fn reserved_names() {
     // That Linux and FreeBSD doesn't like /. and /.. is not that surprising
     // considering that they expose posix message queues through a virtual
     // file system, but not documented either.
-    assert_eq!(unlink("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "unlink /.");
-    assert_eq!(unlink("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "unlink /..");
+    assert_eq!(remove_queue("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "remove /.");
+    assert_eq!(remove_queue("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "remove /..");
     assert_eq!(PosixMq::open("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "open /.");
     assert_eq!(PosixMq::open("/..").unwrap_err().kind(), ErrorKind::PermissionDenied, "open /..");
     assert_eq!(PosixMq::create("/.").unwrap_err().kind(), ErrorKind::PermissionDenied, "create /.");
@@ -87,7 +91,7 @@ fn cstr_empty_name() {
     } else {
         ErrorKind::InvalidInput
     };
-    assert_eq!(unlink_c(cstr("\0")).unwrap_err().kind(), error, "unlink");
+    assert_eq!(remove_queue_c(cstr("\0")).unwrap_err().kind(), error, "remove queue");
     assert_eq!(OpenOptions::readonly().open_c(cstr("\0")).unwrap_err().kind(), error, "open");
     assert_eq!(
         OpenOptions::readonly().create().open_c(cstr("\0")).unwrap_err().kind(),
@@ -100,8 +104,8 @@ fn cstr_empty_name() {
 #[test]
 fn cstr_no_slash() {
     let noslash = cstr("noslash\0");
-    let err = unlink_c(noslash).expect_err("unlink noslash").kind();
-    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "unlink noslash");
+    let err = remove_queue_c(noslash).expect_err("remove noslash").kind();
+    assert!(err == ErrorKind::InvalidInput || err == ErrorKind::NotFound, "remove noslash");
     let err = OpenOptions::readonly().create().open_c(noslash).expect_err("create noslash").kind();
     assert_eq!(err, ErrorKind::InvalidInput, "create noslash");
 }
@@ -130,7 +134,7 @@ fn open_invalid_params() {
 #[test]
 fn invalid_permissions() {
     let result = OpenOptions::readwrite().mode(!0).create().open("/set_everything");
-    let _ = unlink("/set_everything");
+    let _ = remove_queue("/set_everything");
     // All tested operating systems ignore unknown bits
     result.expect("unknown bits or permissions were not ignored");
 }
@@ -140,7 +144,7 @@ fn invalid_permissions() {
 fn default_permissions() {
     let _ = PosixMq::create("/default_permissions").unwrap();
     let metadata = fs::metadata("/dev/mqueue/default_permissions").unwrap();
-    let _ = unlink("/default_permissions");
+    let _ = remove_queue("/default_permissions");
     assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
 }
 
@@ -153,6 +157,6 @@ fn custom_permissions() {
         .open("/custom_permissions")
         .unwrap();
     let metadata = fs::metadata("/dev/mqueue/custom_permissions").unwrap();
-    let _ = unlink("/custom_permissions");
+    let _ = remove_queue("/custom_permissions");
     assert_eq!(metadata.permissions().mode() & 0o777, 0o344);
 }

@@ -1,12 +1,12 @@
 //! Tests of file descriptor based features.
 
 extern crate posixmq;
-use posixmq::{PosixMq, unlink};
+use posixmq::{PosixMq, remove_queue};
 
 #[test]
 fn is_cloexec() {
     let mq = PosixMq::create("/is_cloexec").unwrap();
-    let _ = unlink("/is_cloexec");
+    let _ = remove_queue("/is_cloexec");
     assert!(mq.is_cloexec());
 }
 
@@ -14,7 +14,7 @@ fn is_cloexec() {
 #[cfg(not(any(target_os="illumos", target_os="solaris")))]
 fn change_cloexec() {
     let mq = PosixMq::create("/change_cloexec").unwrap();
-    let _ = unlink("/change_cloexec");
+    let _ = remove_queue("/change_cloexec");
     mq.set_cloexec(false).unwrap();
     assert!(!mq.is_cloexec());
     mq.set_cloexec(true).unwrap();
@@ -28,7 +28,7 @@ fn try_clone() {
     use std::os::unix::io::AsRawFd;
 
     let a = PosixMq::create("/clone_fd").unwrap();
-    let _ = unlink("/clone_fd");
+    let _ = remove_queue("/clone_fd");
     let b = a.try_clone().unwrap();
     assert!(a.as_raw_fd() != b.as_raw_fd());
     assert!(b.is_cloexec());
@@ -50,7 +50,7 @@ fn into_fd_doesnt_drop() {
     use std::os::unix::io::{FromRawFd, IntoRawFd};
 
     let mq = PosixMq::create("/via_fd").unwrap();
-    let _ = unlink("/via_fd");
+    let _ = remove_queue("/via_fd");
     unsafe {
         mq.send(0, b"foo").unwrap();
         let fd = mq.into_raw_fd();
@@ -76,8 +76,8 @@ fn mio_06() {
     let opts = opts.nonblocking().capacity(1).max_msg_len(10).create_new();
     let mq_a = opts.open("/mio_06_a").unwrap();
     let mq_b = opts.open("/mio_06_b").unwrap();
-    let _ = unlink("/mio_06_a");
-    let _ = unlink("/mio_06_b");
+    let _ = remove_queue("/mio_06_a");
+    let _ = remove_queue("/mio_06_b");
 
     poll.register(&mq_b, Token(1), Ready::readable(), PollOpt::edge())
         .expect("cannot register message queue with poll");
@@ -131,8 +131,8 @@ fn mio_07() {
     let opts = opts.nonblocking().capacity(1).max_msg_len(10).create_new();
     let mq_a = opts.open("/mio_a").unwrap();
     let mq_b = opts.open("/mio_b").unwrap();
-    let _ = unlink("/mio_a");
-    let _ = unlink("/mio_b");
+    let _ = remove_queue("/mio_a");
+    let _ = remove_queue("/mio_b");
 
     poll.registry().register(&mut &mq_b, Token(1), Interest::READABLE)
         .expect("cannot register message queue with poll");
