@@ -1013,26 +1013,40 @@ impl PosixMq {
     ///
     /// Posix message queues are closed on exec by default,
     /// but this can be changed with [`set_cloexec()`](#method.set_cloexec).
-    /// On operating systems where that function is not available,
-    /// this function unconditionally returns `true`.
+    ///
+    /// This function is not available on Illumos, Solaris or VxWorks.
     ///
     /// # Errors
     ///
-    /// Retrieving this flag should only fail if the message queue descriptor
-    /// is already closed. In that case `true` is returned as it will
-    /// not be open after `exec`ing either.
-    pub fn is_cloexec(&self) -> bool {
+    /// Retrieving this flag should only fail if the descriptor
+    /// is already closed.  
+    /// In that case it will obviously not be open after execing,
+    /// so treating errors as `true` should be safe.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let queue = posixmq::PosixMq::create("is_cloexec").expect("open queue");
+    /// # posixmq::remove_queue("is_cloexec").expect("delete queue");
+    /// assert!(queue.is_cloexec().unwrap_or(true));
+    /// ```
+    pub fn is_cloexec(&self) -> Result<bool, io::Error> {
         #[cfg(any(
             target_os="linux", target_os="freebsd",
             target_os="netbsd", target_os="dragonfly",
         ))]
-        {
-            let flags = unsafe { fcntl(self.as_raw_fd(), F_GETFD) };
-            if flags != -1 {
-                return (flags & FD_CLOEXEC) != 0;
-            }
+        match unsafe { fcntl(self.as_raw_fd(), F_GETFD) } {
+            -1 => Err(io::Error::last_os_error()),
+            flags => Ok((flags & FD_CLOEXEC) != 0),
         }
-        return true;
+        #[cfg(not(any(
+            target_os="linux", target_os="freebsd",
+            target_os="netbsd", target_os="dragonfly",
+        )))]
+        Err(io::Error::new(
+            ErrorKind::Other,
+            "close-on-exec information is not available"
+        ))
     }
 
     /// Change close-on-exec for this descriptor.

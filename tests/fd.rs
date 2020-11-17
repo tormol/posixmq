@@ -3,11 +3,19 @@
 extern crate posixmq;
 use posixmq::{PosixMq, remove_queue};
 
+use std::io::ErrorKind;
+
 #[test]
 fn is_cloexec() {
     let mq = PosixMq::create("/is_cloexec").unwrap();
     let _ = remove_queue("/is_cloexec");
-    assert!(mq.is_cloexec());
+    if cfg!(not(any(target_os="illumos", target_os="solaris"))) {
+        assert!(mq.is_cloexec().unwrap());
+    } else {
+        let error = mq.is_cloexec().unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Other);
+        assert!(error.to_string().contains("not available"));
+    }
 }
 
 #[test]
@@ -16,9 +24,9 @@ fn change_cloexec() {
     let mq = PosixMq::create("/change_cloexec").unwrap();
     let _ = remove_queue("/change_cloexec");
     mq.set_cloexec(false).unwrap();
-    assert!(!mq.is_cloexec());
+    assert!(!mq.is_cloexec().unwrap());
     mq.set_cloexec(true).unwrap();
-    assert!(mq.is_cloexec());
+    assert!(mq.is_cloexec().unwrap());
 }
 
 
@@ -31,7 +39,7 @@ fn try_clone() {
     let _ = remove_queue("/clone_fd");
     let b = a.try_clone().unwrap();
     assert!(a.as_raw_fd() != b.as_raw_fd());
-    assert!(b.is_cloexec());
+    assert!(b.is_cloexec().unwrap());
     a.send(0, b"a").expect("original descriptor should not be closed");
     b.send(1, b"b").expect("cloned descriptor is should be usable");
     assert_eq!(
