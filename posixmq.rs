@@ -215,15 +215,6 @@
 //! Later 1.y.0 releases might increase this. Until rustup has builds for
 //! DragonFly BSD and Illumos, the minimum version will not be increased past
 //! what is available in the repositories for those operating systems.
-//!
-//! # Possible future features
-//!
-//! * Struct that unlinks a message queue when dropped
-//! * Listing queues and their owners using OS-specific interfaces
-//!   (such as /dev/mqueue/ on Linux)
-//! * `tmpfile()` equivalent
-//! * Querying and possibly changing limits and default values
-//! * Expose `mq_notify()`?
 
 // # Why this crate requires `std`
 //
