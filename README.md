@@ -33,13 +33,6 @@ posixmq = {version="1.0", features=["mio_07"]}
 
 Also remember to open the message queues in nonblocking mode.
 
-## Differences from the [posix_mq](https://github.com/aprilabank/posix_mq.rs) crate
-
-* `send()` and `recv()` borrows byte slices instead of consuming and producing vectors, avoiding unnecessary allocations.
-* Supports deadlines / timeouts.
-* Optionally integrates with Mio.
-* Is dual-licensed Apache-2.0 and MIT instead of only MIT.
-
 ## Minimum supported Rust version
 
 The minimum Rust version for 1.0.\* releases is 1.39.0 if the `mio_07` feature is enabled, and 1.31.1 otherwise.  
