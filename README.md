@@ -52,3 +52,25 @@ at your option.
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+## Release history
+
+### Version 0.2.0 (2019-07-08)
+
+* Change `PosixMq::open()` to open in read-write mode instead of read-only.
+* Rename `OpenOptions.permissions()` to `.mode()` for consistency with `std`.
+* Remove `OpenOptions.not_cloexec()`.
+* Add `.send_timeout()`, `send_deadline()`, `receive_timeout()` and `receive_deadline()`.
+* Add `Iter` and `IntoIter` receiving iterator types.
+
+### Version 0.1.1 (2019-04-05)
+
+* Add `.try_clone()`.
+* Add `PosixMq::from_raw_mqd()`, `.as_raw_mqd()` and `.into_raw_mqd()`.
+* Implement `Sync` on FreeBSD.
+* Support DragonFly BSD, NetBSD and Illumos.
+* Support ARM targets and `linux-x86_64-unknown-gnux32`.
+
+### Version 0.1.0 (2019-03-25)
+
+* Support Linux and FreeBSD.
