@@ -14,12 +14,12 @@ loop {
 }
 ```
 
-## Supported operating systems
+## Supported Operating Systems
 
 posixmq has been tested to work on Linux, FreeBSD, NetBSD, DragonFly BSD and OmniOSce, but not all features are available everywhere. See rustdoc for details.  
 ***macOS, OpenBSD, Android and Windows doesn't have posix message queues**, and this crate will fail to compile there.
 
-## optional mio integration
+## Optional mio Integration
 
 On Linux, FreeBSD and DragonFly BSD, posix message queues can be registered with epoll / kqueue, and therefore used with [mio](https://github.com/tokio-rs/mio).
 Both mio version 0.6 and 0.7 are supported, through the opt-in crate features `mio_06` and `mio_07`.
@@ -38,7 +38,7 @@ Also remember to open the message queues in nonblocking mode.
 The minimum Rust version for 1.0.\* releases is 1.39.0 if the `mio_07` feature is enabled, and 1.31.1 otherwise.  
 Later 1.\*.0 releases might increase this. Until rustup has builds for DragonFly and Illumos, the minimum version will not be increased past what is available in repositories for these operating systems.  
 New optional features might require newer Rust versions.
-To lock to a minor release, use `posixmq = "1.0.*"` in Cargo.toml, or just copy posixmq.rs into your project.
+To lock to a minor release, use `posixmq = "1.0.*"` in Cargo.toml, or copy posixmq.rs into your project and remove feature gates as necessary.
 
 ## License
 
@@ -53,14 +53,14 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-## Release history
+## Release History
 
 ### Version 0.2.0 (2019-07-08)
 
 * Change `PosixMq::open()` to open in read-write mode instead of read-only.
 * Rename `OpenOptions.permissions()` to `.mode()` for consistency with `std`.
 * Remove `OpenOptions.not_cloexec()`.
-* Add `.send_timeout()`, `send_deadline()`, `receive_timeout()` and `receive_deadline()`.
+* Add `.send_timeout()`, `.send_deadline()`, `.receive_timeout()` and `.receive_deadline()`.
 * Add `Iter` and `IntoIter` receiving iterator types.
 
 ### Version 0.1.1 (2019-04-05)
@@ -73,4 +73,5 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ### Version 0.1.0 (2019-03-25)
 
+* (initial release).
 * Support Linux and FreeBSD.
