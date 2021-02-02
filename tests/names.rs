@@ -70,13 +70,13 @@ fn create_short_remove_cstr() {
     let mut excl = OpenOptions::readwrite();
     excl.create_new();
 
-    excl.open("short").expect("create new queue short");
+    excl.open("cshort").expect("create new queue cshort");
     assert_eq!(
-        excl.open("/short").expect_err("try to re-create /short").kind(),
+        excl.open("/cshort").expect_err("try to re-create /cshort").kind(),
         ErrorKind::AlreadyExists,
     );
-    remove_queue_c(CStr::from_bytes_with_nul(b"/short\0").unwrap())
-        .expect("delete /short");
+    remove_queue_c(CStr::from_bytes_with_nul(b"/cshort\0").unwrap())
+        .expect("delete /cshort");
 }
 
 fn test_normalization(name_with_slash: &str) {
