@@ -918,7 +918,7 @@ impl PosixMq {
     )]
     #[cfg_attr(
         not(any(target_os="linux", target_os="android", target_os="netbsd", target_os="dragonfly")),
-        doc="```rust,no_compile"
+        doc="```no_compile"
     )]
     /// # use std::os::unix::io::FromRawFd;
     /// # let bad = unsafe { posixmq::PosixMq::from_raw_fd(-1) };
