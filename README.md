@@ -55,6 +55,22 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 
 ## Release History
 
+### Version 1.0.0 (2021-02-02)
+
+* Return errors from `.attributes()`,  `.is_nonblocking()` and `.is_cloexec()`.
+  For consistency with `std` and to make it easier to catch bugs.
+* Rename `.receive()` to `.recv()` for consistency with `std`.
+  (`.receive_deadline()` and `.receive_timeout()` are also renamed to `.recv_deadline()` and `.recv_timeout()`)
+* Rename `unlink()` to `remove_queue()` for consistency with `std`.
+  (`unlink_c()` is also renamed to `remove_queue_c()`)
+* Make `Attributes` partially opaque for future extensibility, and implement `Default` for it.
+* Remove `name_from_bytes()`.
+* Rename `mio` feature for integrating with Mio 0.6 to `mio_06`.
+* Add `mio_07` feature for integrating with Mio 0.7.
+* Implement `Clone` for the borrowing iterator `posixmq::Iter`.
+* Avoid allocating for queue names shorter than 47 bytes.
+* Disable non-standard features on unknown operating systems.
+
 ### Version 0.2.0 (2019-07-08)
 
 * Change `PosixMq::open()` to open in read-write mode instead of read-only.
