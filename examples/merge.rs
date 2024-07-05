@@ -1,18 +1,15 @@
 //! Receive messages from multiple queues and send them to another,
 //! asynchronously.
 
-extern crate posixmq;
-extern crate mio_07 as mio;
+use std::env::args;
+use std::io::ErrorKind;
+
+use mio_07::{Events, Interest, Poll, Token};
 
 fn main() {
-    use std::env::args;
-    use std::io::ErrorKind;
-
-    use mio::{Poll, Events, Interest, Token};
-
     let mut queues = args().skip(1).collect::<Vec<_>>();
     let dst = queues.pop().expect("arguments required");
-    
+
     // open source queues
     let mut src = Vec::new();
     for name in queues {
@@ -23,7 +20,11 @@ fn main() {
     }
 
     // open destination queue
-    let mut dst = match posixmq::OpenOptions::writeonly().nonblocking().create().open(&dst) {
+    let mut dst = match posixmq::OpenOptions::writeonly()
+        .nonblocking()
+        .create()
+        .open(&dst)
+    {
         Ok(mq) => (mq, dst),
         Err(e) => panic!("Cannot open or create {:?} for sending: {}", dst, e),
     };
@@ -32,9 +33,9 @@ fn main() {
     poll.registry()
         .register(&mut dst.0, Token(0), Interest::WRITABLE)
         .expect("registering destination failed");
-    for (i, &mut(ref mut src, _)) in src.iter_mut().enumerate() {
+    for (i, &mut (ref mut src, _)) in src.iter_mut().enumerate() {
         poll.registry()
-            .register(src, Token(i+1), Interest::READABLE)
+            .register(src, Token(i + 1), Interest::READABLE)
             .expect("registering a source failed");
     }
 
@@ -51,7 +52,7 @@ fn main() {
                 continue;
             }
 
-            let &(ref mq, ref name) = &src[event.token().0-1];
+            let &(ref mq, ref name) = &src[event.token().0 - 1];
             loop {
                 match mq.recv(&mut buf) {
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
@@ -69,8 +70,12 @@ fn main() {
                 }
                 panic!("Error sending to {}: {}", dst.1, e);
             }
-            println!("message of priority {} with {} bytes from {} sent to {}", 
-                priority, msg.len(), src, dst.1
+            println!(
+                "message of priority {} with {} bytes from {} sent to {}",
+                priority,
+                msg.len(),
+                src,
+                dst.1
             );
             let _ = unsent.pop();
         }

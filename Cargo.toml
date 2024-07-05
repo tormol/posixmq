@@ -9,26 +9,32 @@ authors = ["Torbjørn Birch Moltu <t.b.moltu@lyse.net>"]
 keywords = ["posix", "mq", "mqueue", "queue"]
 categories = ["os::unix-apis", "asynchronous"]
 exclude = ["/tests/*.sh", "/tests/*.c"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-libc = "0.2.59"
+libc = "0.2.155"
 # 0.2.59 added mq_timed{send,receive}() and FIONCLEX for Linux and all mq_ functions for solarish
 mio_06 = {package="mio", version="0.6.14", optional=true}
 # 0.6.13 drags in libc 0.1 when built with -Z minimal-versions
-mio_07 = {package="mio", version="0.7.0", features=["os-util"], optional=true}
+mio_07 = {package="mio", version="0.7", features=["os-util"], optional=true}
+mio_08 = {package="mio", version="0.8", features=["os-ext"], optional=true}
+mio_1 = {package="mio", version="1.0", features=["os-ext"], optional=true}
 # examples and tests for mio_07 also requires mio feature os-poll,
 # but adding it as a dev-dependency would also enable it in all cases (cargo bug #4866)
 # instead RUSTFLAGS='--cfg feature="os-poll"' must be used to build & run mio_07 tests
 
-[lib]
-path = "posixmq.rs"
-
 [[example]]
 name = "merge"
-path = "examples/merge.rs"
 required-features = ["mio_07"]
+
+[dev-dependencies]
+mio_07 = {package="mio", version="0.7", features=["os-util"]}
+
+[features]
+mio_06 = ["dep:mio_06"]
+mio_07 = ["dep:mio_07"]
+mio_08 = ["dep:mio_08"]
+mio_1 = ["dep:mio_1"]
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "feature=\"os-poll\""]

@@ -1,27 +1,63 @@
 //! Tests queue name handling, without testing the OS.
 
-use std::io::ErrorKind;
 use std::ffi::{CStr, CString};
+use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, remove_queue, remove_queue_c};
+use posixmq::{remove_queue, remove_queue_c, OpenOptions, PosixMq};
 
 #[test]
 fn checks_for_nul_in_short_names() {
-    assert_eq!(remove_queue("/trailing\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("/trailing\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue("trailing\0").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("trailing\0").unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue("/trailing\0").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("/trailing\0").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue("trailing\0").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("trailing\0").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
 
-    assert_eq!(remove_queue("/in\0between").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("/in\0between").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue("in\0between").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("in\0between").unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue("/in\0between").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("/in\0between").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue("in\0between").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("in\0between").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
 
-    assert_eq!(remove_queue("/\0first").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("/\0first").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue("\0first").unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create("\0first").unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue("/\0first").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("/\0first").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue("\0first").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create("\0first").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
 }
 
 #[test]
@@ -30,24 +66,60 @@ fn checks_for_nul_in_long_names() {
     long[0] = b'/';
 
     long[99] = b'\0';
-    assert_eq!(remove_queue(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
     long[99] = b'w';
 
     long[50] = b'\0';
-    assert_eq!(remove_queue(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
     long[50] = b'w';
 
     long[1] = b'\0';
-    assert_eq!(remove_queue(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(remove_queue(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
-    assert_eq!(PosixMq::create(&long[1..]).unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        remove_queue(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        remove_queue(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        PosixMq::create(&long[1..]).unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
     long[1] = b'w';
 }
 
@@ -61,8 +133,7 @@ fn create_long_remove_cstr() {
         .create_new()
         .open(&long[1..99])
         .expect("create new queue with long name");
-    remove_queue_c(CStr::from_bytes_with_nul(&long).unwrap())
-        .expect("delete queue with long name");
+    remove_queue_c(CStr::from_bytes_with_nul(&long).unwrap()).expect("delete queue with long name");
 }
 
 #[test]
@@ -72,11 +143,12 @@ fn create_short_remove_cstr() {
 
     excl.open("cshort").expect("create new queue cshort");
     assert_eq!(
-        excl.open("/cshort").expect_err("try to re-create /cshort").kind(),
+        excl.open("/cshort")
+            .expect_err("try to re-create /cshort")
+            .kind(),
         ErrorKind::AlreadyExists,
     );
-    remove_queue_c(CStr::from_bytes_with_nul(b"/cshort\0").unwrap())
-        .expect("delete /cshort");
+    remove_queue_c(CStr::from_bytes_with_nul(b"/cshort\0").unwrap()).expect("delete /cshort");
 }
 
 fn test_normalization(name_with_slash: &str) {
@@ -84,50 +156,93 @@ fn test_normalization(name_with_slash: &str) {
 
     // trailing NUL
     assert_eq!(
-        PosixMq::open(proper_c_string.as_bytes_with_nul()).expect_err(
-            &format!("{}\\0 ({} bytes) is rejected", name_with_slash, name_with_slash.len()+1)
-        ).kind(),
+        PosixMq::open(proper_c_string.as_bytes_with_nul())
+            .expect_err(&format!(
+                "{}\\0 ({} bytes) is rejected",
+                name_with_slash,
+                name_with_slash.len() + 1
+            ))
+            .kind(),
         ErrorKind::InvalidInput,
-        "opening {}\\0 ({} bytes) is rejected", name_with_slash, name_with_slash.len()+1
+        "opening {}\\0 ({} bytes) is rejected",
+        name_with_slash,
+        name_with_slash.len() + 1
     );
     assert_eq!(
-        remove_queue(proper_c_string.as_bytes_with_nul()).unwrap_err().kind(),
+        remove_queue(proper_c_string.as_bytes_with_nul())
+            .unwrap_err()
+            .kind(),
         ErrorKind::InvalidInput,
-        "deleting {}\\0 ({} bytes) is rejected", name_with_slash, name_with_slash.len()+1
+        "deleting {}\\0 ({} bytes) is rejected",
+        name_with_slash,
+        name_with_slash.len() + 1
     );
     assert_eq!(
-        PosixMq::open(&proper_c_string.as_bytes_with_nul()[1..]).expect_err(
-            &format!("{}\\0 ({} bytes) is rejected", &name_with_slash[1..], name_with_slash.len())
-        ).kind(),
+        PosixMq::open(&proper_c_string.as_bytes_with_nul()[1..])
+            .expect_err(&format!(
+                "{}\\0 ({} bytes) is rejected",
+                &name_with_slash[1..],
+                name_with_slash.len()
+            ))
+            .kind(),
         ErrorKind::InvalidInput,
-        "opening {}\\0 ({} bytes) is rejected", &name_with_slash[1..], name_with_slash.len()
+        "opening {}\\0 ({} bytes) is rejected",
+        &name_with_slash[1..],
+        name_with_slash.len()
     );
     assert_eq!(
-        remove_queue(&proper_c_string.as_bytes_with_nul()[1..]).unwrap_err().kind(),
+        remove_queue(&proper_c_string.as_bytes_with_nul()[1..])
+            .unwrap_err()
+            .kind(),
         ErrorKind::InvalidInput,
-        "deleting {}\\0 ({} bytes) is rejected", &name_with_slash[1..], name_with_slash.len()
+        "deleting {}\\0 ({} bytes) is rejected",
+        &name_with_slash[1..],
+        name_with_slash.len()
     );
 
-    OpenOptions::readwrite().create_new().open_c(&proper_c_string).expect(
-        &format!("create new {} ({} bytes) via CStr", name_with_slash, name_with_slash.len())
+    OpenOptions::readwrite()
+        .create_new()
+        .open_c(&proper_c_string)
+        .expect(&format!(
+            "create new {} ({} bytes) via CStr",
+            name_with_slash,
+            name_with_slash.len()
+        ));
+    assert_eq!(
+        OpenOptions::readwrite()
+            .create_new()
+            .open(name_with_slash)
+            .expect_err(&format!(
+                "re-create {} ({} bytes)",
+                name_with_slash,
+                name_with_slash.len()
+            ))
+            .kind(),
+        ErrorKind::AlreadyExists,
+        "{} ({} bytes) already exists",
+        name_with_slash,
+        name_with_slash.len()
     );
     assert_eq!(
-        OpenOptions::readwrite().create_new().open(name_with_slash).expect_err(
-            &format!("re-create {} ({} bytes)", name_with_slash, name_with_slash.len())
-        ).kind(),
+        OpenOptions::readwrite()
+            .create_new()
+            .open(&name_with_slash[1..])
+            .expect_err(&format!(
+                "re-create {} ({} bytes)",
+                &name_with_slash[1..],
+                name_with_slash.len() - 1
+            ))
+            .kind(),
         ErrorKind::AlreadyExists,
-        "{} ({} bytes) already exists", name_with_slash, name_with_slash.len()
+        "{} ({} bytes) already exists",
+        &name_with_slash[1..],
+        name_with_slash.len() - 1
     );
-    assert_eq!(
-        OpenOptions::readwrite().create_new().open(&name_with_slash[1..]).expect_err(
-            &format!("re-create {} ({} bytes)", &name_with_slash[1..], name_with_slash.len()-1)
-        ).kind(),
-        ErrorKind::AlreadyExists,
-        "{} ({} bytes) already exists", &name_with_slash[1..], name_with_slash.len()-1
-    );
-    remove_queue(&name_with_slash[1..]).expect(
-        &format!("delete {} ({} bytes)", &name_with_slash[1..], name_with_slash.len()-1)
-    );
+    remove_queue(&name_with_slash[1..]).expect(&format!(
+        "delete {} ({} bytes)",
+        &name_with_slash[1..],
+        name_with_slash.len() - 1
+    ));
 }
 
 #[test]
@@ -146,7 +261,7 @@ fn long() {
 fn edge_between_short_and_long() {
     for len_with_slash in 40..=52 {
         let mut name = String::from("/name_");
-        name.extend((b'A'..=b'Z').take(len_with_slash-6).map(|c| c as char ));
+        name.extend((b'A'..=b'Z').take(len_with_slash - 6).map(|c| c as char));
         test_normalization(&name);
     }
 }

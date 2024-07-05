@@ -1,7 +1,5 @@
 //! Uses a queue to sort command line arguments based on thir length.
 
-extern crate posixmq;
-
 use std::env::args_os;
 use std::ffi::CStr;
 use std::io::{stdout, ErrorKind, Write};
@@ -10,7 +8,7 @@ use std::os::unix::ffi::OsStringExt;
 fn main() {
     let args = args_os()
         .skip(1)
-        .map(|osstring| osstring.into_vec() )
+        .map(|osstring| osstring.into_vec())
         .collect::<Vec<Vec<u8>>>();
     if args.is_empty() {
         return; // nothing to do
@@ -43,8 +41,9 @@ fn main() {
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
             Err(e) => panic!("receiving failed: {}", e),
             Ok((_priority, len)) => {
-                stdout.write_all(&recv_buf[..len])
-                    .and_then(|()| stdout.write_all(b"\n") )
+                stdout
+                    .write_all(&recv_buf[..len])
+                    .and_then(|()| stdout.write_all(b"\n"))
                     .expect("writing to stdout failed");
             }
         }

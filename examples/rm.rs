@@ -1,8 +1,6 @@
 //! Simple utility for deleting posix message queues.
 //! Useful to clean up when something doesn't clean up after itself.
 
-extern crate posixmq;
-
 use std::env::args_os;
 use std::os::unix::ffi::OsStrExt;
 

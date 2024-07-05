@@ -63,8 +63,8 @@
 //! ```
 //!
 //! With mio (and `features = ["mio_07"]` in Cargo.toml):
-#![cfg_attr(feature="mio_07", doc="```")]
-#![cfg_attr(not(feature="mio_07"), doc="```compile_fail")]
+#![cfg_attr(feature = "mio_07", doc = "```")]
+#![cfg_attr(not(feature = "mio_07"), doc = "```compile_fail")]
 //! # extern crate mio_07 as mio;
 //! # use mio::{Events, Poll, Interest, Token};
 //! # use std::io::ErrorKind;
@@ -136,15 +136,15 @@
 //!
 //! * `FromRawFd`+`IntoRawFd`+[`try_clone()`](struct.PosixMq.html#method.try_clone):
 //!   For theese to work, the inner `mqd_t` type must be an `int`/`RawFd` typedef,
-//!   and known to represent a file descriptor.  
+//!   and known to represent a file descriptor.
 //!   These impls are only available on OSes where this is known to be the case,
 //!   to increase the likelyhood that the core features will compile on an
 //!   unknown OS.
 //! * `AsRawFd`+[`set_cloexec()`](struct.PosixMq.html#method.set_cloexec):
 //!   Similar to `FromRawFd` and `IntoRawFd`, but FreeBSD 11+ has [a function](https://svnweb.freebsd.org/base/head/include/mqueue.h?revision=306588&view=markup#l54)
-//!   which lets one get a file descriptor from a `mqd_t`.  
-//!   Changing or querying close-on-exec requires `AsRawFd`, and is only 
-//!   only meaningful on operating systems that have the concept of `exec()`.  
+//!   which lets one get a file descriptor from a `mqd_t`.
+//!   Changing or querying close-on-exec requires `AsRawFd`, and is only
+//!   only meaningful on operating systems that have the concept of `exec()`.
 //!   [`is_cloexec()`](struct.PosixMq.html#method.is_cloexec) is always present
 //!   and returns `true` on OSes where close-on-exec cannot be disabled or one
 //!   cannot `exec()`. (posix message queue descriptors should have
@@ -161,14 +161,14 @@
 //! On FreeBSD, the kernel module responsible for posix message queues
 //! is not loaded by default; Run `kldload mqueuefs` as root to enable it.
 //! To list queues, the file system must additionally be mounted first:
-//! `mount -t mqueuefs null $somewhere`.  
+//! `mount -t mqueuefs null $somewhere`.
 //! Versions before 11 do not have the function used to get a file descriptor,
 //! so this library will not compile there.
 //!
 //! On NetBSD, re-opening message queues multiple times can eventually make all
 //! further opens fail. This does not affect programs that open a single
-//! queue once.  
-//! The mio integration compiles, but registering message queues with mio fails.  
+//! queue once.
+//! The mio integration compiles, but registering message queues with mio fails.
 //! Because NetBSD ignores cloexec when opening or cloning descriptors, there
 //! is a race condition with other threads exec'ing before this library can
 //! enable close-on-exec for the descriptor.
@@ -211,7 +211,7 @@
 //!
 //! # Minimum supported Rust version
 //!
-//! The minimum supported Rust version for posixmq 1.0.z releases is 1.31.1.  
+//! The minimum supported Rust version for posixmq 1.0.z releases is 1.31.1.
 //! Later 1.y.0 releases might increase this. Until rustup has builds for
 //! DragonFly BSD and Illumos, the minimum version will not be increased past
 //! what is available in the repositories for those operating systems.
@@ -224,55 +224,55 @@
 // Depending on std also means that functions can use `io::Error` and
 // `SystemTime` instead of custom types.
 
-#![allow(clippy::needless_return, clippy::redundant_closure, clippy::needless_lifetimes)] // style
-#![allow(clippy::range_plus_one)] // edge case: I think 1..x+1 is clearer than 1..=x
-#![allow(clippy::cast_lossless)] // improves portability when values are limited by the OS anyway
-// feel free to disable more lints
-
-use std::{io, mem, ptr};
 use std::ffi::CStr;
-use std::io::ErrorKind;
-use std::fmt::{self, Debug, Formatter};
 #[cfg(any(
-    target_os="linux", target_os="freebsd",
-    target_os="netbsd", target_os="dragonfly",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonfly",
 ))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
+#[cfg(any(target_os = "linux", target_os = "netbsd", target_os = "dragonfly"))]
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::time::{Duration, SystemTime};
+use std::{fmt, io, mem, ptr};
 
-extern crate libc;
-use libc::{c_int, c_uint, c_char};
-#[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
+#[cfg(not(all(
+    target_arch = "x86_64",
+    target_os = "linux",
+    target_pointer_width = "32"
+)))]
 use libc::c_long;
-use libc::{mqd_t, mq_open, mq_close, mq_unlink, mq_send, mq_receive};
-use libc::{mq_attr, mq_getattr, mq_setattr};
-use libc::{timespec, time_t, mq_timedsend, mq_timedreceive};
-#[cfg(target_os="freebsd")]
+#[cfg(target_os = "freebsd")]
 use libc::mq_getfd_np;
-use libc::{mode_t, O_ACCMODE, O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NONBLOCK};
-#[cfg(any(
-    target_os="linux", target_os="freebsd",
-    target_os="netbsd", target_os="dragonfly",
-))]
-use libc::{fcntl, F_GETFD, FD_CLOEXEC, ioctl, FIOCLEX, FIONCLEX};
-#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
+#[cfg(any(target_os = "linux", target_os = "netbsd", target_os = "dragonfly"))]
 use libc::F_DUPFD_CLOEXEC;
+use libc::{c_char, c_int, c_uint};
+#[cfg(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonfly",
+))]
+use libc::{fcntl, ioctl, FD_CLOEXEC, FIOCLEX, FIONCLEX, F_GETFD};
+use libc::{mode_t, O_ACCMODE, O_CREAT, O_EXCL, O_NONBLOCK, O_RDONLY, O_RDWR, O_WRONLY};
+use libc::{mq_attr, mq_getattr, mq_setattr};
+use libc::{mq_close, mq_open, mq_receive, mq_send, mq_unlink, mqd_t};
+use libc::{mq_timedreceive, mq_timedsend, time_t, timespec};
 
-#[cfg(feature="mio_06")]
-extern crate mio_06;
-#[cfg(feature="mio_06")]
-use mio_06::{event::Evented, unix::EventedFd, Ready, Poll, PollOpt};
-#[cfg(feature="mio_07")]
-extern crate mio_07;
-#[cfg(feature="mio_07")]
-use mio_07::{event::Source, unix::SourceFd, Registry, Interest};
-
+#[cfg(any(
+    feature = "mio_06",
+    feature = "mio_07",
+    feature = "mio_08",
+    feature = "mio_1"
+))]
+mod mio;
 
 const CSTR_BUF_SIZE: usize = 48;
-fn with_name_as_cstr<F: FnOnce(&CStr)->Result<R,io::Error>, R>(mut name: &[u8],  f: F)
--> Result<R,io::Error> {
+fn with_name_as_cstr<F: FnOnce(&CStr) -> Result<R, io::Error>, R>(
+    mut name: &[u8],
+    f: F,
+) -> Result<R, io::Error> {
     if name.first() == Some(&b'/') {
         name = &name[1..];
     }
@@ -280,26 +280,28 @@ fn with_name_as_cstr<F: FnOnce(&CStr)->Result<R,io::Error>, R>(mut name: &[u8], 
     let mut shortbuf: [u8; CSTR_BUF_SIZE];
     let c_bytes = if name.len() + 2 <= CSTR_BUF_SIZE {
         shortbuf = [0; CSTR_BUF_SIZE];
-        &mut shortbuf[..name.len()+2]
+        &mut shortbuf[..name.len() + 2]
     } else {
-        longbuf = vec![0; name.len()+2].into_boxed_slice();
+        longbuf = vec![0; name.len() + 2].into_boxed_slice();
         &mut longbuf
     };
     c_bytes[0] = b'/';
-    c_bytes[1..name.len()+1].copy_from_slice(name);
+    c_bytes[1..name.len() + 1].copy_from_slice(name);
 
     match CStr::from_bytes_with_nul(c_bytes) {
         Ok(name) => f(name),
-        Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "contains nul byte"))
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contains nul byte",
+        )),
     }
 }
-
 
 // Cannot use std::fs's because it doesn't expose getters,
 // and rolling our own means we can also use it for mq-specific capacities.
 /// Flags and parameters which control how a [`PosixMq`](struct.PosixMq.html)
 /// message queue is opened or created.
-#[derive(Clone,Copy, PartialEq,Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct OpenOptions {
     flags: c_int,
     mode: mode_t,
@@ -307,17 +309,17 @@ pub struct OpenOptions {
     max_msg_len: usize,
 }
 
-impl Debug for OpenOptions {
-    fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
+impl fmt::Debug for OpenOptions {
+    fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result {
         fmtr.debug_struct("OpenOptions")
             .field(
                 "read",
-                &((self.flags & O_ACCMODE) == O_RDWR  ||  (self.flags & O_ACCMODE) == O_RDONLY)
-             )
+                &((self.flags & O_ACCMODE) == O_RDWR || (self.flags & O_ACCMODE) == O_RDONLY),
+            )
             .field(
                 "write",
-                &((self.flags & O_ACCMODE) == O_RDWR  ||  (self.flags & O_ACCMODE) == O_WRONLY)
-             )
+                &((self.flags & O_ACCMODE) == O_RDWR || (self.flags & O_ACCMODE) == O_WRONLY),
+            )
             .field("create", &(self.flags & O_CREAT != 0))
             .field("open", &(self.flags & O_EXCL == 0))
             .field("mode", &format_args!("{:03o}", self.mode))
@@ -361,12 +363,12 @@ impl OpenOptions {
     ///
     /// This field is ignored if the queue already exists or should not be created.
     /// If this method is not called, queues are created with mode 600.
-    pub fn mode(&mut self,  mode: u32) -> &mut Self {
+    pub fn mode(&mut self, mode: u32) -> &mut Self {
         // 32bit value for consistency with std::os::unix even though only 12
         // bits are needed. Truncate if necessary because the OS ignores
         // unknown bits anyway. (and they're probably always zero as well).
         self.mode = mode as mode_t;
-        return self;
+        self
     }
 
     /// Set the maximum size of each message.
@@ -375,12 +377,12 @@ impl OpenOptions {
     ///
     /// If max_msg_len and capacity are both zero (or not set), the queue
     /// will be created with a maximum length and capacity decided by the
-    /// operating system.  
+    /// operating system.
     /// If this value is specified, capacity should also be, or opening the
     /// message queue might fail.
-    pub fn max_msg_len(&mut self,  max_msg_len: usize) -> &mut Self {
+    pub fn max_msg_len(&mut self, max_msg_len: usize) -> &mut Self {
         self.max_msg_len = max_msg_len;
-        return self;
+        self
     }
 
     /// Set the maximum number of messages in the queue.
@@ -390,31 +392,31 @@ impl OpenOptions {
     ///
     /// If both capacity and max_msg_len are zero (or not set), the queue
     /// will be created with a maximum length and capacity decided by the
-    /// operating system.  
+    /// operating system.
     /// If this value is specified, max_msg_len should also be, or opening the
     /// message queue might fail.
-    pub fn capacity(&mut self,  capacity: usize) -> &mut Self {
+    pub fn capacity(&mut self, capacity: usize) -> &mut Self {
         self.capacity = capacity;
-        return self;
+        self
     }
 
     /// Create message queue if it doesn't exist.
     pub fn create(&mut self) -> &mut Self {
         self.flags |= O_CREAT;
         self.flags &= !O_EXCL;
-        return self;
+        self
     }
 
     /// Create a new queue, failing if the queue already exists.
     pub fn create_new(&mut self) -> &mut Self {
         self.flags |= O_CREAT | O_EXCL;
-        return self;
+        self
     }
 
     /// Require the queue to already exist, failing if it doesn't.
     pub fn existing(&mut self) -> &mut Self {
         self.flags &= !(O_CREAT | O_EXCL);
-        return self;
+        self
     }
 
     /// Open the message queue in non-blocking mode.
@@ -422,7 +424,7 @@ impl OpenOptions {
     /// This must be done if you want to use the message queue with mio.
     pub fn nonblocking(&mut self) -> &mut Self {
         self.flags |= O_NONBLOCK;
-        return self;
+        self
     }
 
     /// Open a queue with the specified options.
@@ -443,9 +445,9 @@ impl OpenOptions {
     /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
     /// * Possibly other
-    pub fn open<N: AsRef<[u8]> + ?Sized>(&self,  name: &N) -> Result<PosixMq, io::Error> {
-        pub fn open_slice(opts: &OpenOptions,  name: &[u8]) -> Result<PosixMq, io::Error> {
-            with_name_as_cstr(name, |name| opts.open_c(&name) )
+    pub fn open<N: AsRef<[u8]> + ?Sized>(&self, name: &N) -> Result<PosixMq, io::Error> {
+        pub fn open_slice(opts: &OpenOptions, name: &[u8]) -> Result<PosixMq, io::Error> {
+            with_name_as_cstr(name, |name| opts.open_c(name))
         }
         open_slice(self, name.as_ref())
     }
@@ -469,7 +471,7 @@ impl OpenOptions {
     /// * Name is too long (ENAMETOOLONG) => `ErrorKind::Other`
     /// * Unlikely (ENFILE, EMFILE, ENOMEM, ENOSPC) => `ErrorKind::Other`
     /// * Possibly other
-    pub fn open_c(&self,  name: &CStr) -> Result<PosixMq, io::Error> {
+    pub fn open_c(&self, name: &CStr) -> Result<PosixMq, io::Error> {
         let opts = self;
 
         // because mq_open is a vararg function, mode_t cannot be passed
@@ -477,7 +479,7 @@ impl OpenOptions {
         let permissions = opts.mode as c_int;
 
         let mut capacities = unsafe { mem::zeroed::<mq_attr>() };
-        let capacities_ptr = if opts.capacity != 0  ||  opts.max_msg_len != 0 {
+        let capacities_ptr = if opts.capacity != 0 || opts.max_msg_len != 0 {
             capacities.mq_maxmsg = opts.capacity as KernelLong;
             capacities.mq_msgsize = opts.max_msg_len as KernelLong;
             &mut capacities as *mut mq_attr
@@ -490,19 +492,18 @@ impl OpenOptions {
         if mqd == -1isize as mqd_t {
             return Err(io::Error::last_os_error());
         }
-        let mq = PosixMq{mqd};
+        let mq = PosixMq { mqd };
 
         // NetBSD and DragonFly BSD doesn't set cloexec by default and
         // ignores O_CLOEXEC. Setting it with FIOCLEX works though.
         // Propagate error if setting cloexec somehow fails, even though
         // close-on-exec won't matter in most cases.
-        #[cfg(any(target_os="netbsd", target_os="dragonfly"))]
+        #[cfg(any(target_os = "netbsd", target_os = "dragonfly"))]
         mq.set_cloexec(true)?;
 
         Ok(mq)
     }
 }
-
 
 /// Delete a posix message queue.
 ///
@@ -522,7 +523,7 @@ impl OpenOptions {
 /// * Possibly other
 pub fn remove_queue<N: AsRef<[u8]> + ?Sized>(name: &N) -> Result<(), io::Error> {
     fn remove_queue_slice(name: &[u8]) -> Result<(), io::Error> {
-        with_name_as_cstr(name, |name| remove_queue_c(&name) )
+        with_name_as_cstr(name, remove_queue_c)
     }
     remove_queue_slice(name.as_ref())
 }
@@ -552,20 +553,28 @@ pub fn remove_queue_c(name: &CStr) -> Result<(), io::Error> {
     Ok(())
 }
 
-
 // The fields of `mq_attr` and `timespec` are of type `long` on all targets
 // except x86_64-unknown-linux-gnux32, where they are `long long` (to match up
 // with normal x86_64 `long`).
 // Rusts lack of implicit widening makes this peculiarity annoying.
-#[cfg(all(target_arch="x86_64", target_os="linux", target_pointer_width="32"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_os = "linux",
+    target_pointer_width = "32"
+))]
 type KernelLong = i64;
-#[cfg(not(all(target_arch="x86_64", target_os="linux", target_pointer_width="32")))]
+#[cfg(not(all(
+    target_arch = "x86_64",
+    target_os = "linux",
+    target_pointer_width = "32"
+)))]
 type KernelLong = c_long;
 
 /// Contains information about the capacities and state of a posix message queue.
 ///
 /// Created by [`PosixMq::attributes()`](struct.PosixMq.html#method.attributes).
-#[derive(Clone,Copy, PartialEq,Eq, Default)]
+#[non_exhaustive]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Attributes {
     /// The maximum size of messages that can be stored in the queue.
     pub max_msg_len: usize,
@@ -577,11 +586,10 @@ pub struct Attributes {
     /// Whether the descriptor was set to nonblocking mode when
     /// the attributes were retrieved.
     pub nonblocking: bool,
-    _private: ()
 }
 
-impl Debug for Attributes {
-    fn fmt(&self,  fmtr: &mut fmt::Formatter) -> fmt::Result {
+impl fmt::Debug for Attributes {
+    fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result {
         fmtr.debug_struct("Attributes")
             .field("max_msg_len", &self.max_msg_len)
             .field("capacity", &self.capacity)
@@ -591,28 +599,31 @@ impl Debug for Attributes {
     }
 }
 
-
-macro_rules! retry_if_interrupted {($call:expr) => {{
-    loop {// catch EINTR and retry
-        let ret = $call;
-        if ret != -1 {
-            break ret;
+macro_rules! retry_if_interrupted {
+    ($call:expr) => {{
+        loop {
+            // catch EINTR and retry
+            let ret = $call;
+            if ret != -1 {
+                break ret;
+            }
+            let err = io::Error::last_os_error();
+            if err.kind() != io::ErrorKind::Interrupted {
+                return Err(err);
+            }
         }
-        let err = io::Error::last_os_error();
-        if err.kind() != ErrorKind::Interrupted {
-            return Err(err)
-        }
-    }
-}}}
+    }};
+}
 
 /// Returns saturated timespec as err if systemtime cannot be represented
+#[allow(arithmetic_overflow)]
 fn deadline_to_realtime(deadline: SystemTime) -> Result<timespec, timespec> {
     /// Don't use struct literal in case timespec has extra fields on some platform.
-    fn new_timespec(secs: time_t,  nsecs: KernelLong) -> timespec {
+    fn new_timespec(secs: time_t, nsecs: KernelLong) -> timespec {
         let mut ts: timespec = unsafe { mem::zeroed() };
         ts.tv_sec = secs;
         ts.tv_nsec = nsecs;
-        return ts;
+        ts
     }
 
     // mq_timedsend() and mq_timedreceive() takes an absolute point in time,
@@ -620,10 +631,11 @@ fn deadline_to_realtime(deadline: SystemTime) -> Result<timespec, timespec> {
     match deadline.duration_since(SystemTime::UNIX_EPOCH) {
         // Currently SystemTime has the same range as the C types, but
         // avoid truncation in case this changes.
-        Ok(expires) if expires.as_secs() > time_t::max_value() as u64
-            => Err(new_timespec(time_t::max_value(), 0)),
-        Ok(expires)
-            => Ok(new_timespec(expires.as_secs() as time_t, expires.subsec_nanos() as KernelLong)),
+        Ok(expires) if expires.as_secs() > time_t::MAX as u64 => Err(new_timespec(time_t::MAX, 0)),
+        Ok(expires) => Ok(new_timespec(
+            expires.as_secs() as time_t,
+            expires.subsec_nanos() as KernelLong,
+        )),
         // A pre-1970 deadline is probably a bug, but handle it anyway.
         // Based on https://github.com/solemnwarning/timespec/blob/master/README.md
         // the subsecond part of timespec should be positive and counts toward
@@ -631,10 +643,12 @@ fn deadline_to_realtime(deadline: SystemTime) -> Result<timespec, timespec> {
         // advantage of simplifying addition and subtraction, but is the
         // opposite of Duration which counts away from zero.
         // The minimum representable value is therefore (-min_value(), 0)
-        Err(ref earlier) if earlier.duration() > Duration::new(time_t::max_value() as u64 + 1, 0)
-            => Err(new_timespec(time_t::min_value()+1, 0)), // add one to avoid negation bugs
-        Err(ref earlier) if earlier.duration().subsec_nanos() == 0
-            => Ok(new_timespec(-(earlier.duration().as_secs() as time_t), 0)),
+        Err(ref earlier) if earlier.duration() > Duration::new(time_t::MAX as u64 + 1, 0) => {
+            Err(new_timespec(time_t::MAX + 1, 0))
+        } // add one to avoid negation bugs
+        Err(ref earlier) if earlier.duration().subsec_nanos() == 0 => {
+            Ok(new_timespec(-(earlier.duration().as_secs() as time_t), 0))
+        }
         Err(earlier) => {
             // convert fractional part from counting away from zero to counting
             // toward positive infinity
@@ -666,16 +680,21 @@ fn timeout_to_realtime(timeout: Duration) -> Result<timespec, io::Error> {
         // will be caught by the first check.
         // Using wrapping_add and catching overflow afterwards avoids repeating
         // the error creation and also handles negative system time.
-        if timeout.as_secs() > time_t::max_value() as u64  ||  expires.tv_sec < now.tv_sec {
-            Err(io::Error::new(ErrorKind::InvalidInput, "timeout is too long"))
+        if timeout.as_secs() > time_t::MAX as u64 || expires.tv_sec < now.tv_sec {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "timeout is too long",
+            ))
         } else {
             Ok(expires)
         }
     } else {
-        Err(io::Error::new(ErrorKind::Other, "system time is not representable"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "system time is not representable",
+        ))
     }
 }
-
 
 /// A descriptor for an open posix message queue.
 ///
@@ -687,7 +706,7 @@ fn timeout_to_realtime(timeout: Duration) -> Result<timespec, io::Error> {
 /// See [the documentation in the crate root](index.html) for examples,
 /// portability notes and OS details.
 pub struct PosixMq {
-    mqd: mqd_t
+    mqd: mqd_t,
 }
 
 impl PosixMq {
@@ -707,7 +726,6 @@ impl PosixMq {
         OpenOptions::readwrite().create().open(name)
     }
 
-
     /// Add a message to the queue.
     ///
     /// For maximum portability, avoid using priorities >= 32 or sending
@@ -721,7 +739,7 @@ impl PosixMq {
     /// * Priority is too high (EINVAL) => `ErrorKind::InvalidInput`
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn send(&self,  priority: u32,  msg: &[u8]) -> Result<(), io::Error> {
+    pub fn send(&self, priority: u32, msg: &[u8]) -> Result<(), io::Error> {
         let mptr = msg.as_ptr() as *const c_char;
         retry_if_interrupted!(unsafe { mq_send(self.mqd, mptr, msg.len(), priority as c_uint) });
         Ok(())
@@ -737,12 +755,12 @@ impl PosixMq {
     /// * The receive buffer is smaller than the queue's maximum message size (EMSGSIZE) => `ErrorKind::Other`
     /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn recv(&self,  msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
+    pub fn recv(&self, msgbuf: &mut [u8]) -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
         let mut priority = 0 as c_uint;
-        let len = retry_if_interrupted!(
-            unsafe { mq_receive(self.mqd, bptr, msgbuf.len(), &mut priority) }
-        );
+        let len = retry_if_interrupted!(unsafe {
+            mq_receive(self.mqd, bptr, msgbuf.len(), &mut priority)
+        });
         // c_uint is unlikely to differ from u32, but even if it's bigger, the
         // range of supported values will likely be far smaller.
         Ok((priority as u32, len as usize))
@@ -753,13 +771,11 @@ impl PosixMq {
     ///
     /// If the message queue is opened in non-blocking mode the iterator can be
     /// used to drain the queue. Otherwise it will block and never end.
-    pub fn iter<'a>(&'a self) -> Iter<'a> {
+    pub fn iter(&self) -> Iter<'_> {
         self.into_iter()
     }
 
-
-    fn timedsend(&self,  priority: u32,  msg: &[u8],  deadline: &timespec)
-    -> Result<(), io::Error> {
+    fn timedsend(&self, priority: u32, msg: &[u8], deadline: &timespec) -> Result<(), io::Error> {
         let mptr = msg.as_ptr() as *const c_char;
         retry_if_interrupted!(unsafe {
             mq_timedsend(self.mqd, mptr, msg.len(), priority as c_uint, deadline)
@@ -786,16 +802,20 @@ impl PosixMq {
     /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
     /// * Timeout is too long / not representable => `ErrorKind::InvalidInput`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn send_timeout(&self,  priority: u32,  msg: &[u8],  timeout: Duration)
-    -> Result<(), io::Error> {
-        timeout_to_realtime(timeout).and_then(|expires| self.timedsend(priority, msg, &expires) )
+    pub fn send_timeout(
+        &self,
+        priority: u32,
+        msg: &[u8],
+        timeout: Duration,
+    ) -> Result<(), io::Error> {
+        timeout_to_realtime(timeout).and_then(|expires| self.timedsend(priority, msg, &expires))
     }
 
     /// Add a message to the queue or cancel if the queue is still full at a
     /// certain point in time.
     ///
     /// Returns immediately if opened in nonblocking mode, and the timeout has
-    /// no effect.  
+    /// no effect.
     /// The deadline is a `SystemTime` because the queues are intended for
     /// inter-process commonication, and `Instant` might be process-specific.
     ///
@@ -811,21 +831,31 @@ impl PosixMq {
     /// * Queue is full and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
     /// * Queue is opened in write-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn send_deadline(&self,  priority: u32,  msg: &[u8],  deadline: SystemTime)
-    -> Result<(), io::Error> {
+    pub fn send_deadline(
+        &self,
+        priority: u32,
+        msg: &[u8],
+        deadline: SystemTime,
+    ) -> Result<(), io::Error> {
         match deadline_to_realtime(deadline) {
             Ok(expires) => self.timedsend(priority, msg, &expires),
-            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "deadline is not representable"))
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "deadline is not representable",
+            )),
         }
     }
 
-    fn timedreceive(&self,  msgbuf: &mut[u8],  deadline: &timespec)
-    -> Result<(u32, usize), io::Error> {
+    fn timedreceive(
+        &self,
+        msgbuf: &mut [u8],
+        deadline: &timespec,
+    ) -> Result<(u32, usize), io::Error> {
         let bptr = msgbuf.as_mut_ptr() as *mut c_char;
         let mut priority: c_uint = 0;
-        let len = retry_if_interrupted!(
-            unsafe { mq_timedreceive(self.mqd, bptr, msgbuf.len(), &mut priority, deadline) }
-        );
+        let len = retry_if_interrupted!(unsafe {
+            mq_timedreceive(self.mqd, bptr, msgbuf.len(), &mut priority, deadline)
+        });
         Ok((priority as u32, len as usize))
     }
 
@@ -843,16 +873,19 @@ impl PosixMq {
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Timeout is too long / not representable => `ErrorKind::InvalidInput`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn recv_timeout(&self,  msgbuf: &mut[u8],  timeout: Duration)
-    -> Result<(u32, usize), io::Error> {
-        timeout_to_realtime(timeout).and_then(|expires| self.timedreceive(msgbuf, &expires) )
+    pub fn recv_timeout(
+        &self,
+        msgbuf: &mut [u8],
+        timeout: Duration,
+    ) -> Result<(u32, usize), io::Error> {
+        timeout_to_realtime(timeout).and_then(|expires| self.timedreceive(msgbuf, &expires))
     }
 
     /// Take the message with the highest priority from the queue or cancel if
     /// the queue is still empty at a point in time.
     ///
     /// Returns immediately if opened in nonblocking mode, and the timeout has
-    /// no effect.  
+    /// no effect.
     /// The deadline is a `SystemTime` because the queues are intended for
     /// inter-process commonication, and `Instant` might be process-specific.
     ///
@@ -863,14 +896,19 @@ impl PosixMq {
     /// * Queue is empty and opened in nonblocking mode (EAGAIN) => `ErrorKind::WouldBlock`
     /// * Queue is opened in read-only mode (EBADF) => `ErrorKind::Other`
     /// * Possibly other => `ErrorKind::Other`
-    pub fn recv_deadline(&self,  msgbuf: &mut[u8],  deadline: SystemTime)
-    -> Result<(u32, usize), io::Error> {
+    pub fn recv_deadline(
+        &self,
+        msgbuf: &mut [u8],
+        deadline: SystemTime,
+    ) -> Result<(u32, usize), io::Error> {
         match deadline_to_realtime(deadline) {
             Ok(expires) => self.timedreceive(msgbuf, &expires),
-            Err(_) => Err(io::Error::new(ErrorKind::InvalidInput, "deadline is not representable"))
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "deadline is not representable",
+            )),
         }
     }
-
 
     /// Get information about the state of the message queue.
     ///
@@ -881,7 +919,7 @@ impl PosixMq {
     ///
     /// On operating systems where the descriptor is a pointer, such as on
     /// FreeBSD and Illumos, such bugs will enable undefined behavior
-    /// and this call will dereference freed or uninitialized memory.  
+    /// and this call will dereference freed or uninitialized memory.
     /// (That doesn't make this function unsafe though -
     /// [`PosixMq::from_raw_mqd()`](#method.from_raw_mqd) and `mq_close()` are.)
     ///
@@ -913,12 +951,22 @@ impl PosixMq {
     /// [`from_raw_fd()`](#method.from_raw_fd) or similar)).
     ///
     #[cfg_attr(
-        any(target_os="linux", target_os="android", target_os="netbsd", target_os="dragonfly"),
-        doc="```"
+        any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ),
+        doc = "```"
     )]
     #[cfg_attr(
-        not(any(target_os="linux", target_os="android", target_os="netbsd", target_os="dragonfly")),
-        doc="```no_compile"
+        not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        )),
+        doc = "```no_compile"
     )]
     /// # use std::os::unix::io::FromRawFd;
     /// # let bad = unsafe { posixmq::PosixMq::from_raw_fd(-1) };
@@ -938,7 +986,6 @@ impl PosixMq {
                 capacity: attrs.mq_maxmsg as usize,
                 current_messages: attrs.mq_curmsgs as usize,
                 nonblocking: (attrs.mq_flags & (O_NONBLOCK as KernelLong)) != 0,
-                _private: ()
             })
         }
     }
@@ -949,10 +996,10 @@ impl PosixMq {
     ///
     /// Should only fail as result of buggy code that either created this
     /// descriptor from something that is not a queue, or has already closed
-    /// the underlying descriptor.  
+    /// the underlying descriptor.
     /// (This function will not silently succeed if the fd points to anything
     /// other than a queue (for example a socket), as this function
-    /// is a wrapper around [`attributes()`][#method.attributes].)  
+    /// is a wrapper around [`attributes()`][#method.attributes].)
     /// To ignore failure, one can write `.is_nonblocking().unwrap_or(false)`.
     ///
     /// ## An error doesn't guarantee that any further [`send()`](#method.send) or [`recv()`](#method.recv) wont block.
@@ -978,9 +1025,13 @@ impl PosixMq {
     /// Setting nonblocking mode should only fail due to incorrect usage of
     /// `from_raw_fd()` or `as_raw_fd()`, see the documentation on
     /// [`attributes()`](struct.PosixMq.html#method.attributes) for details.
-    pub fn set_nonblocking(&self,  nonblocking: bool) -> Result<(), io::Error> {
+    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), io::Error> {
         let mut attrs: mq_attr = unsafe { mem::zeroed() };
-        attrs.mq_flags = if nonblocking {O_NONBLOCK as KernelLong} else {0};
+        attrs.mq_flags = if nonblocking {
+            O_NONBLOCK as KernelLong
+        } else {
+            0
+        };
         let res = unsafe { mq_setattr(self.mqd, &attrs, ptr::null_mut()) };
         if res == -1 {
             return Err(io::Error::last_os_error());
@@ -988,25 +1039,23 @@ impl PosixMq {
         Ok(())
     }
 
-
     /// Create a new descriptor for the same message queue.
     ///
     /// The new descriptor will have close-on-exec set.
     ///
     /// This function is not available on FreeBSD, Illumos or Solaris.
-    #[cfg(any(target_os="linux", target_os="dragonfly", target_os="netbsd"))]
+    #[cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "netbsd"))]
     pub fn try_clone(&self) -> Result<Self, io::Error> {
         let mq = match unsafe { fcntl(self.mqd, F_DUPFD_CLOEXEC, 0) } {
             -1 => return Err(io::Error::last_os_error()),
-            fd => PosixMq{mqd: fd},
+            fd => PosixMq { mqd: fd },
         };
         // NetBSD ignores the cloexec part of F_DUPFD_CLOEXEC
         // (but DragonFly BSD respects it here)
-        #[cfg(target_os="netbsd")]
+        #[cfg(target_os = "netbsd")]
         mq.set_cloexec(true)?;
         Ok(mq)
     }
-
 
     /// Check whether this descriptor will be closed if the process `exec`s
     /// into another program.
@@ -1019,7 +1068,7 @@ impl PosixMq {
     /// # Errors
     ///
     /// Retrieving this flag should only fail if the descriptor
-    /// is already closed.  
+    /// is already closed.
     /// In that case it will obviously not be open after execing,
     /// so treating errors as `true` should be safe.
     ///
@@ -1032,20 +1081,24 @@ impl PosixMq {
     /// ```
     pub fn is_cloexec(&self) -> Result<bool, io::Error> {
         #[cfg(any(
-            target_os="linux", target_os="freebsd",
-            target_os="netbsd", target_os="dragonfly",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
         ))]
         match unsafe { fcntl(self.as_raw_fd(), F_GETFD) } {
             -1 => Err(io::Error::last_os_error()),
             flags => Ok((flags & FD_CLOEXEC) != 0),
         }
         #[cfg(not(any(
-            target_os="linux", target_os="freebsd",
-            target_os="netbsd", target_os="dragonfly",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
         )))]
         Err(io::Error::new(
-            ErrorKind::Other,
-            "close-on-exec information is not available"
+            io::ErrorKind::Other,
+            "close-on-exec information is not available",
         ))
     }
 
@@ -1062,24 +1115,25 @@ impl PosixMq {
     /// been closed (due to incorrect usage of `from_raw_fd()` or similar),
     /// and not reused for something else yet.
     #[cfg(any(
-        target_os="linux", target_os="freebsd",
-        target_os="netbsd", target_os="dragonfly",
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "dragonfly",
     ))]
-    pub fn set_cloexec(&self,  cloexec: bool) -> Result<(), io::Error> {
-        let op = if cloexec {FIOCLEX} else {FIONCLEX};
+    pub fn set_cloexec(&self, cloexec: bool) -> Result<(), io::Error> {
+        let op = if cloexec { FIOCLEX } else { FIONCLEX };
         match unsafe { ioctl(self.as_raw_fd(), op) } {
             // Don't hide the error here, because callers can ignore the
             // returned value if they want.
             -1 => Err(io::Error::last_os_error()),
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
-
 
     /// Create a `PosixMq` from an already opened message queue descriptor.
     ///
     /// This function should only be used for ffi or if calling `mq_open()`
-    /// directly for some reason.  
+    /// directly for some reason.
     /// Use [`from_raw_fd()`](#method.from_raw_fd) instead if the surrounding
     /// code requires `mqd_t` to be a file descriptor.
     ///
@@ -1088,7 +1142,7 @@ impl PosixMq {
     /// On some operating systems `mqd_t` is a pointer, which means that the
     /// safety of most other methods depend on it being correct.
     pub unsafe fn from_raw_mqd(mqd: mqd_t) -> Self {
-        PosixMq{mqd}
+        PosixMq { mqd }
     }
 
     /// Get the raw message queue descriptor.
@@ -1114,7 +1168,7 @@ impl PosixMq {
     pub fn into_raw_mqd(self) -> mqd_t {
         let mqd = self.mqd;
         mem::forget(self);
-        return mqd;
+        mqd
     }
 }
 
@@ -1126,20 +1180,22 @@ impl PosixMq {
 ///
 /// This impl is not available on Illumos, Solaris or VxWorks.
 #[cfg(any(
-    target_os="linux", target_os="freebsd",
-    target_os="netbsd", target_os="dragonfly",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonfly",
 ))]
 impl AsRawFd for PosixMq {
     // On Linux, NetBSD and DragonFly BSD, `mqd_t` is a plain file descriptor
     // and can trivially be convverted, but this is not guaranteed, nor the
     // case on FreeBSD, Illumos and Solaris.
-    #[cfg(not(target_os="freebsd"))]
+    #[cfg(not(target_os = "freebsd"))]
     fn as_raw_fd(&self) -> RawFd {
         self.mqd
     }
 
     // FreeBSD has mq_getfd_np() (where _np stands for non-portable)
-    #[cfg(target_os="freebsd")]
+    #[cfg(target_os = "freebsd")]
     fn as_raw_fd(&self) -> RawFd {
         unsafe { mq_getfd_np(self.mqd) }
     }
@@ -1154,10 +1210,10 @@ impl AsRawFd for PosixMq {
 /// `mqd_t` in a portable fashion (from FFI code or by calling `mq_open()`
 /// yourself for some reason), use
 /// [`from_raw_mqd()`](struct.PosixMq.html#method.from_raw_mqd) instead.
-#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
+#[cfg(any(target_os = "linux", target_os = "netbsd", target_os = "dragonfly"))]
 impl FromRawFd for PosixMq {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        PosixMq{mqd: fd}
+        PosixMq { mqd: fd }
     }
 }
 
@@ -1167,15 +1223,14 @@ impl FromRawFd for PosixMq {
 /// This impl is not available on FreeBSD, Illumos or Solaris. If you need to
 /// transfer ownership to FFI code accepting a `mqd_t`, use
 /// [`into_raw_mqd()`](struct.PosixMq.html#method.into_raw_mqd) instead.
-#[cfg(any(target_os="linux", target_os="netbsd", target_os="dragonfly"))]
+#[cfg(any(target_os = "linux", target_os = "netbsd", target_os = "dragonfly"))]
 impl IntoRawFd for PosixMq {
     fn into_raw_fd(self) -> RawFd {
         let fd = self.mqd;
         mem::forget(self);
-        return fd;
+        fd
     }
 }
-
 
 impl IntoIterator for PosixMq {
     type Item = (u32, Vec<u8>);
@@ -1205,22 +1260,21 @@ impl<'a> IntoIterator for &'a PosixMq {
     }
 }
 
-
-impl Debug for PosixMq {
-    fn fmt(&self,  fmtr: &mut Formatter) -> fmt::Result {
+impl fmt::Debug for PosixMq {
+    fn fmt(&self, fmtr: &mut fmt::Formatter) -> fmt::Result {
         let mut representation = fmtr.debug_struct("PosixMq");
         // display raw value and name unless we know it's a plain fd
-        #[cfg(not(any(
-            target_os="linux", target_os="netbsd", target_os="dragonfly",
-        )))]
+        #[cfg(not(any(target_os = "linux", target_os = "netbsd", target_os = "dragonfly",)))]
         representation.field("mqd", &self.mqd);
         // show file descriptor where we have one
         #[cfg(any(
-            target_os="linux", target_os="freebsd",
-            target_os="netbsd", target_os="dragonfly",
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "dragonfly",
         ))]
         representation.field("fd", &self.as_raw_fd());
-        return representation.finish();
+        representation.finish()
     }
 }
 
@@ -1235,100 +1289,7 @@ impl Drop for PosixMq {
 // blanket-implement Sync, I can't see why an implementation would make it UB
 // to move operations to another thread.
 unsafe impl Send for PosixMq {}
-
-// On FreeBSD, mqd_t is a `struct{int fd, struct sigev_node* node}*`,
-// but the sigevent is only accessed by `mq_notify()`, so it's thread-safe
-// as long as that function requires `&mut self` or isn't exposed.
-//  src: https://svnweb.freebsd.org/base/head/lib/librt/mq.c?view=markup
-// On Illumos, mqd_t points to a rather complex struct, but the functions use
-// mutexes and semaphores, so I assume they're totally thread-safe.
-//  src: https://github.com/illumos/illumos-gate/blob/master/usr/src/lib/libc/port/rt/mqueue.c
-// Solaris I assume is equivalent to Illumos, because the Illumos code has
-// barely been modified after the initial source code release.
-// Linux, NetBSD and DragonFly BSD gets Sync auto-implemented because
-// mqd_t is an int.
-#[cfg(any(target_os="freebsd", target_os="illumos", target_os="solaris"))]
 unsafe impl Sync for PosixMq {}
-
-
-/// Allow receiving event notifications through mio (version 0.6).
-///
-/// This impl requires the `mio_06` feature to be enabled:
-///
-/// ```toml
-/// [dependencies]
-/// posixmq = {version="1.0", features=["mio_06"]}
-/// ```
-///
-/// Remember to open the queue in non-blocking mode. (with `OpenOptions.noblocking()`)
-#[cfg(feature="mio_06")]
-impl Evented for PosixMq {
-    fn register(&self,  poll: &Poll,  token: mio_06::Token,  interest: Ready,  opts: PollOpt)
-    -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).register(poll, token, interest, opts)
-    }
-
-    fn reregister(&self,  poll: &Poll,  token: mio_06::Token,  interest: Ready,  opts: PollOpt)
-    -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).reregister(poll, token, interest, opts)
-    }
-
-    fn deregister(&self,  poll: &Poll) -> Result<(), io::Error> {
-        EventedFd(&self.as_raw_fd()).deregister(poll)
-    }
-}
-
-
-/// Allow receiving event notifications through mio (version 0.7).
-///
-/// This impl requires the `mio_07` feature to be enabled:
-///
-/// ```toml
-/// [dependencies]
-/// posixmq = {version="1.0", features=["mio_07"]}
-/// ```
-///
-/// Due to a [long-lived bug in cargo]() this will currently enable
-/// the os_reactor feature of mio. This is not intended, and can change in the
-/// future.
-///
-/// You probably want to make the queue non-blocking: Either use
-/// [`OpenOptions.noblocking()`](struct.OpenOptions.html#method.nonblocking)
-/// when preparing to open the queue, or call [`set_nonblocking(true)`](struct.PosixMq.html#method.set_nonblocking).
-#[cfg(feature="mio_07")]
-impl Source for &PosixMq {
-    fn register(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
-    -> Result<(), io::Error> {
-        SourceFd(&self.as_raw_fd()).register(registry, token, interest)
-    }
-
-    fn reregister(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
-    -> Result<(), io::Error> {
-        SourceFd(&self.as_raw_fd()).reregister(registry, token, interest)
-    }
-
-    fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
-        SourceFd(&self.as_raw_fd()).deregister(registry)
-    }
-}
-
-#[cfg(feature="mio_07")]
-impl Source for PosixMq {
-    fn register(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
-    -> Result<(), io::Error> {
-        {&mut &*self}.register(registry, token, interest)
-    }
-
-    fn reregister(&mut self,  registry: &Registry,  token: mio_07::Token,  interest: Interest)
-    -> Result<(), io::Error> {
-        {&mut &*self}.reregister(registry, token, interest)
-    }
-
-    fn deregister(&mut self,  registry: &Registry) -> Result<(), io::Error> {
-        {&mut &*self}.deregister(registry)
-    }
-}
-
 
 /// An `Iterator` that calls [`recv()`](struct.PosixMq.html#method.recv) on a borrowed [`PosixMq`](struct.PosixMq.html).
 ///
@@ -1351,7 +1312,7 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<(u32, Vec<u8>)> {
         let mut buf = vec![0; self.max_msg_len];
         match self.mq.recv(&mut buf) {
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => None,
             Err(e) => panic!("Cannot receive from posix message queue: {}", e),
             Ok((priority, len)) => {
                 buf.truncate(len);
@@ -1379,10 +1340,13 @@ pub struct IntoIter {
 impl Iterator for IntoIter {
     type Item = (u32, Vec<u8>);
     fn next(&mut self) -> Option<(u32, Vec<u8>)> {
-        Iter{mq: &self.mq, max_msg_len: self.max_msg_len}.next()
+        Iter {
+            mq: &self.mq,
+            max_msg_len: self.max_msg_len,
+        }
+        .next()
     }
 }
-
 
 #[cfg(debug_assertions)]
 mod doctest_md_files {
@@ -1392,5 +1356,5 @@ mod doctest_md_files {
         $(#[$meta])* // can't #[cfg_attr(, doc=)] in .md file
         enum $attach_to {}
     }}
-    mdfile!{include_str!("README.md"), Readme}
+    mdfile! {include_str!("../README.md"), Readme}
 }

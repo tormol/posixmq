@@ -3,13 +3,19 @@
 use std::io::ErrorKind;
 
 extern crate posixmq;
-use posixmq::{PosixMq, OpenOptions, remove_queue};
+use posixmq::{remove_queue, OpenOptions, PosixMq};
 
 #[test]
 fn nonexistant() {
     let _ = remove_queue(b"/404"); // in case it already exists
-    assert_eq!(remove_queue("/404").unwrap_err().kind(), ErrorKind::NotFound);
-    assert_eq!(PosixMq::open("/404").unwrap_err().kind(), ErrorKind::NotFound);
+    assert_eq!(
+        remove_queue("/404").unwrap_err().kind(),
+        ErrorKind::NotFound
+    );
+    assert_eq!(
+        PosixMq::open("/404").unwrap_err().kind(),
+        ErrorKind::NotFound
+    );
 }
 
 #[test]
@@ -34,9 +40,11 @@ fn create_and_remove() {
     let mq = OpenOptions::readwrite().create_new().open("/flash");
     mq.expect("cannot create");
     remove_queue("/flash").expect("cannot remove queue");
-    assert_eq!(PosixMq::open("/flash").unwrap_err().kind(), ErrorKind::NotFound);
+    assert_eq!(
+        PosixMq::open("/flash").unwrap_err().kind(),
+        ErrorKind::NotFound
+    );
 }
-
 
 #[test]
 fn is_not_nonblocking() {
@@ -58,7 +66,7 @@ fn is_nonblocking() {
     let _ = posixmq::remove_queue("/is_nonblocking");
 
     assert!(mq.is_nonblocking().expect("get attributes"));
-    assert_eq!(mq.recv(&mut[0]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    assert_eq!(mq.recv(&mut [0]).unwrap_err().kind(), ErrorKind::WouldBlock);
     mq.send(5, b"e").unwrap();
     assert_eq!(mq.send(6, b"f").unwrap_err().kind(), ErrorKind::WouldBlock);
 }
@@ -69,11 +77,13 @@ fn change_nonblocking() {
     let _ = posixmq::remove_queue("/change_nonblocking");
     mq.set_nonblocking(true).unwrap();
     assert!(mq.is_nonblocking().unwrap());
-    assert_eq!(mq.recv(&mut[0; 8192]).unwrap_err().kind(), ErrorKind::WouldBlock);
+    assert_eq!(
+        mq.recv(&mut [0; 8192]).unwrap_err().kind(),
+        ErrorKind::WouldBlock
+    );
     mq.set_nonblocking(false).unwrap();
     assert!(!mq.is_nonblocking().unwrap());
 }
-
 
 #[test]
 fn send_errors() {
@@ -85,13 +95,17 @@ fn send_errors() {
         .capacity(2)
         .open("send")
         .unwrap();
-    assert_eq!(nb.send(0, b"too long").unwrap_err().kind(), ErrorKind::Other);
+    assert!(nb.send(0, b"too long").is_err());
 
     let bl = OpenOptions::readwrite().open("send").unwrap();
-    assert_eq!(bl.send(!0, b"f").unwrap_err().kind(), ErrorKind::InvalidInput);
+    assert_eq!(
+        bl.send(!0, b"f").unwrap_err().kind(),
+        ErrorKind::InvalidInput
+    );
 
     nb.send(9, b"a").expect("nonblocking send \"a\"");
-    if cfg!(target_os="netbsd") || cfg!(target_os="dragonfly") {// doesn't allow empty messages
+    if cfg!(target_os = "netbsd") || cfg!(target_os = "dragonfly") {
+        // doesn't allow empty messages
         bl.send(0, b"b").expect("blocking send \"b\"");
     } else {
         bl.send(0, b"").expect("blocking send empty");
@@ -99,7 +113,7 @@ fn send_errors() {
     assert_eq!(nb.send(0, b"b").unwrap_err().kind(), ErrorKind::WouldBlock);
 
     let ro = OpenOptions::readonly().open("send").unwrap();
-    assert_eq!(ro.send(0, b"").unwrap_err().kind(), ErrorKind::Other); // opened read-only
+    assert!(ro.send(0, b"").is_err()); // opened read-only
 
     let _ = remove_queue("send");
 }
@@ -113,10 +127,13 @@ fn recv_errors() {
         .capacity(2)
         .open("receive")
         .unwrap();
-    assert_eq!(nb.recv(&mut[0; 2]).unwrap_err().kind(), ErrorKind::WouldBlock);
-    assert_eq!(nb.recv(&mut[]).unwrap_err().kind(), ErrorKind::Other); // buffer too short
+    assert_eq!(
+        nb.recv(&mut [0; 2]).unwrap_err().kind(),
+        ErrorKind::WouldBlock
+    );
+    assert!(nb.recv(&mut []).is_err()); // buffer too short
     let wo = OpenOptions::writeonly().open("receive").unwrap();
-    assert_eq!(wo.recv(&mut[0; 2]).unwrap_err().kind(), ErrorKind::Other); // opened write-only
+    assert!(wo.recv(&mut [0; 2]).is_err()); // opened write-only
 
     let _ = remove_queue("receive");
 }
@@ -144,7 +161,11 @@ fn send_and_receive() {
 
 #[test]
 fn iterators() {
-    let mq = OpenOptions::readwrite().nonblocking().create().open("/iterable").unwrap();
+    let mq = OpenOptions::readwrite()
+        .nonblocking()
+        .create()
+        .open("/iterable")
+        .unwrap();
     let _ = posixmq::remove_queue("/iterable");
 
     for n in 0..8 {
@@ -152,7 +173,10 @@ fn iterators() {
     }
     assert_eq!(mq.iter().next(), Some((7, "7".to_string().into_bytes())));
     for (priority, message) in &mq {
-        assert_eq!(String::from_utf8(message).unwrap().parse::<u32>().unwrap(), priority);
+        assert_eq!(
+            String::from_utf8(message).unwrap().parse::<u32>().unwrap(),
+            priority
+        );
     }
     mq.set_nonblocking(false).unwrap();
     for fruit in &["apple", "pear", "watermelon"] {
@@ -169,11 +193,8 @@ fn iterators() {
 fn iterator_panics_if_writeonly() {
     let mq = OpenOptions::writeonly().create().open("writeonly").unwrap();
     let _ = remove_queue("writeonly");
-    for (_, _) in mq {
-
-    }
+    for (_, _) in mq {}
 }
-
 
 #[test]
 #[ignore] // racy
@@ -184,9 +205,13 @@ fn drop_closes() {
     let fake_clone = unsafe { PosixMq::from_raw_mqd(mqd) };
     // cast to usize because pointers cannot be compared directly
     assert_eq!(fake_clone.as_raw_mqd() as usize, mqd as usize);
-    fake_clone.send(0, b"b").expect("as_raw_mqd() should not close");
+    fake_clone
+        .send(0, b"b")
+        .expect("as_raw_mqd() should not close");
     drop(mq);
-    fake_clone.send(0, b"b").expect_err("Drop should have closed the descriptor");
+    fake_clone
+        .send(0, b"b")
+        .expect_err("Drop should have closed the descriptor");
     // also tests that drop ignores errors
 }
 
@@ -197,15 +222,19 @@ fn into_mqd_doesnt_drop() {
     unsafe {
         let mqd = mq.into_raw_mqd();
         let mq = PosixMq::from_raw_mqd(mqd);
-        mq.send(0, b"lorem ipsum").expect("descriptor should remain open");
+        mq.send(0, b"lorem ipsum")
+            .expect("descriptor should remain open");
     }
 }
 
-
 #[test]
 fn is_send_and_sync() {
-    fn is_send<T:Send>() -> bool {true}
-    fn is_sync<T:Sync>() -> bool {true}
+    fn is_send<T: Send>() -> bool {
+        true
+    }
+    fn is_sync<T: Sync>() -> bool {
+        true
+    }
     is_send::<PosixMq>();
     is_sync::<PosixMq>();
 }

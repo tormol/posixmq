@@ -18,6 +18,8 @@ task:
     - cargo build
     - cargo build --features mio_06
     - cargo build --features mio_07
+    - cargo build --features mio_08
+    - cargo build --features mio_1
     - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
@@ -30,9 +32,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 1.31
+  name: Linux amd64 1.79
   container:
-    image: rust:1.31
+    image: rust:1.79
     cpu: 1
     memory: 1
   cargo_cache:
@@ -48,9 +50,9 @@ task:
     - rm -rf $HOME/.cargo/registry/index
 
 task:
-  name: Linux amd64 1.39
+  name: Linux amd64 1.79
   container:
-    image: rust:1.39
+    image: rust:1.79
     cpu: 1
     memory: 1
   cargo_cache:
@@ -79,12 +81,15 @@ task:
     - cargo build -Zfeatures=all -Zminimal-versions
     - cargo build -Zfeatures=all -Zminimal-versions --features mio_06
     - cargo build -Zfeatures=all -Zminimal-versions --features mio_07
+    - cargo build -Zfeatures=all -Zminimal-versions --features mio_08
+    - cargo build -Zfeatures=all -Zminimal-versions --features mio_1
     - cargo build -Zfeatures=all -Zminimal-versions --all-features
   test_script:
     - cargo test -Zfeatures=all -Zminimal-versions
     - cargo test -Zfeatures=all -Zminimal-versions --features mio_06
-    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test -Zfeatures=all -Zminimal-versions --features mio_07
+    - cargo test -Zfeatures=all -Zminimal-versions --features mio_08
+    - cargo test -Zfeatures=all -Zminimal-versions --features mio_1
     - cargo test -Zfeatures=all -Zminimal-versions --all-features
   before_cache_script:
     - rm -rf $HOME/.cargo/registry/index
@@ -108,7 +113,6 @@ task:
     - cargo build --target i686-unknown-linux-gnu --all-features
     - cargo build --target i686-unknown-linux-musl --all-features
   test_script:
-    - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo test --target i686-unknown-linux-gnu --all-features
     - cargo test --target i686-unknown-linux-musl --all-features
     - cargo run --example limits
@@ -125,7 +129,7 @@ task:
   setup_script:
     - rustup component add clippy
     - rustup target add x86_64-unknown-netbsd
-    - rustup target add x86_64-sun-solaris
+    - rustup target add x86_64-pc-solaris
     - rustup target add x86_64-unknown-linux-gnux32
     - rustup target add aarch64-unknown-linux-gnu
   cargo_cache:
@@ -136,7 +140,7 @@ task:
     - cargo clippy --all-features
     - export RUSTFLAGS='--cfg feature="os-poll"'
     - cargo check --target x86_64-unknown-netbsd --tests --examples --all-features
-    - cargo check --target x86_64-sun-solaris --tests --examples
+    - cargo check --target x86_64-pc-solaris --tests --examples
     - cargo check --target x86_64-unknown-linux-gnux32 --tests --examples --all-features
     - cargo check --target aarch64-unknown-linux-gnu --tests --examples --all-features
   before_cache_script:
